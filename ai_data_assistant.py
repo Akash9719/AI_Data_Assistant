@@ -26,8 +26,10 @@ website = pd.read_csv("website_Data.csv")
 
 st.subheader("Dataset Preview")
 
-preview = sales.merge(share, on=["Date","Product"]) \
-               .merge(returns, on=["Date","Product"])
+preview = sales.copy()
+preview["SalesSharePercent"] = share["SalesSharePercent"]
+preview["Cancellations"] = returns["Cancellations"]
+preview["Returns"] = returns["Returns"]
 
 st.dataframe(preview.head())
 
@@ -188,4 +190,5 @@ if question:
 
 st.write("---")
 st.caption("AI Business Copilot for Data Analytics")
+
 
