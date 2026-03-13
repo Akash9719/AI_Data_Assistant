@@ -300,8 +300,3 @@ elif "sales" in q:
 
 st.write("---")
 st.caption("Enterprise AI Analytics Platform | Powered by Rishikriti Technologies")
-
-
-
-
-
