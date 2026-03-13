@@ -85,26 +85,43 @@ if question:
     # PRODUCT SALES
     # ----------------------------
 
-    if detected_product and "sales" in q:
+if detected_product and "sales" in q:
 
-        data = sales[sales["Product"] == detected_product]
+    data = sales[sales["Product"] == detected_product]
+
+    # Detect year
+    year = None
+
+    if "2018" in q:
+        year = 2018
+    elif "2019" in q:
+        year = 2019
+    elif "2020" in q:
+        year = 2020
+
+    if year:
+        data = data[data["Date"].astype(str).str.contains(str(year))]
+
+    # Detect average
+    if "average" in q or "mean" in q:
+
+        avg = data["Sales"].mean()
+
+        st.success(f"Average sales of {detected_product} in {year}: {round(avg,2)}")
+
+    else:
 
         total = data["Sales"].sum()
 
         st.success(f"Total sales of {detected_product}: {total}")
 
-        fig, ax = plt.subplots()
+    fig, ax = plt.subplots()
 
-        data.groupby("Date")["Sales"].sum().plot(ax=ax)
+    data.groupby("Date")["Sales"].sum().plot(ax=ax)
 
-        ax.set_title(f"Sales Trend - {detected_product}")
+    ax.set_title(f"Sales Trend - {detected_product}")
 
-        st.pyplot(fig)
-
-        st.info(
-            f"{detected_product} contributes significantly to revenue performance."
-        )
-
+    st.pyplot(fig)
     # ----------------------------
     # SALES BY PRODUCT
     # ----------------------------
@@ -266,6 +283,7 @@ if question:
 
 st.write("---")
 st.caption("Enterprise AI Analytics Platform | Powered by Rishikriti Technologies")
+
 
 
 
