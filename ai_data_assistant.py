@@ -188,3 +188,4 @@ if question:
 
 st.write("---")
 st.caption("AI Business Copilot for Data Analytics")
+
