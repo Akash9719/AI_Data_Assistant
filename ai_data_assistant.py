@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Enterprise AI Analytics Platform", layout="wide")
 
 st.title("Enterprise AI Analytics Platform")
-st.write("Power BI Dashboard + AI for Data Insights")
+st.write("Power BI Dashboard + Kirti AI")
 
 # ----------------------------
 # POWER BI DASHBOARD
@@ -266,5 +266,6 @@ if question:
 
 st.write("---")
 st.caption("Enterprise AI Analytics Platform | Powered by Rishikriti Technologies")
+
 
 
