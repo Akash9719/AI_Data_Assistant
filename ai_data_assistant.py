@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Enterprise AI Analytics Platform", layout="wide")
 
 st.title("Enterprise AI Analytics Platform")
-st.write("Power BI Dashboard + AI Copilot for Data Insights")
+st.write("Power BI Dashboard + AI for Data Insights")
 
 # ----------------------------
 # POWER BI DASHBOARD
@@ -57,7 +57,7 @@ st.dataframe(preview.head())
 # AI COPILOT
 # ----------------------------
 
-st.subheader("AI Data Copilot")
+st.subheader("AI Analysis")
 
 question = st.text_input("Ask business questions about your data")
 
@@ -265,5 +265,6 @@ if question:
 # ----------------------------
 
 st.write("---")
-st.caption("Enterprise AI Analytics Platform | Powered by AI Copilot")
+st.caption("Enterprise AI Analytics Platform | Powered by Rishikriti Technologies")
+
 
