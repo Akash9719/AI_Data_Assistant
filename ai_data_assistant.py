@@ -1,93 +1,190 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from prophet import Prophet
-from openai import OpenAI
 
-st.title("AI Data Assistant")
+# ------------------------------
+# PAGE CONFIG
+# ------------------------------
 
-# Load datasets
+st.set_page_config(page_title="AI Business Copilot", layout="wide")
+
+st.title("AI Data Copilot")
+st.write("Ask business questions about your data and get insights automatically.")
+
+# ------------------------------
+# LOAD DATA
+# ------------------------------
+
 sales = pd.read_csv("sales_data.csv")
-share = pd.read_csv("product_share.csv")
-returns = pd.read_csv("returns_data.csv")
-traffic = pd.read_csv("website_data.csv")
+share = pd.read_csv("product_Share.csv")
+returns = pd.read_csv("returns_Data.csv")
+website = pd.read_csv("website_Data.csv")
 
-# Merge analytical dataset
-data = sales.merge(share, on="Product", how="left")
-data = data.merge(returns, on="Product", how="left")
-
-traffic["Date"] = pd.to_datetime(traffic["Date"])
+# ------------------------------
+# DATA PREVIEW
+# ------------------------------
 
 st.subheader("Dataset Preview")
-st.dataframe(data.head())
 
-# OpenAI client
-client = OpenAI(api_key="YOUR_API_KEY")
+preview = sales.merge(share, on=["Date","Product"]) \
+               .merge(returns, on=["Date","Product"])
+
+st.dataframe(preview.head())
+
+# ------------------------------
+# USER QUESTION
+# ------------------------------
 
 question = st.text_input("Ask any question about your data")
 
+# ------------------------------
+# AI ANALYSIS ENGINE
+# ------------------------------
+
 if question:
 
-    q = question.lower()
+    question = question.lower()
 
-    # Chart generation
-    if "sales by product" in q:
-        chart = data.groupby("Product")["Sales"].sum()
-        st.bar_chart(chart)
+    st.write("### AI Analysis")
 
-    elif "returns vs cancellations" in q:
-        df = returns.set_index("Product")[["Returns","Cancellations"]]
-        st.bar_chart(df)
+    # --------------------------------
+    # SALES BY PRODUCT
+    # --------------------------------
 
-    elif "revenue trend" in q:
-        st.line_chart(traffic.set_index("Date")["Revenue"])
+    if "sales" in question and "product" in question:
 
-    # Forecasting
-    elif "forecast revenue" in q:
+        result = sales.groupby("Product")["Sales"].sum()
 
-        df = traffic.rename(columns={"Date":"ds","Revenue":"y"})
+        st.subheader("Sales by Product")
 
-        model = Prophet()
-        model.fit(df)
+        fig, ax = plt.subplots()
+        result.plot(kind="bar", ax=ax)
+        ax.set_ylabel("Sales")
 
-        future = model.make_future_dataframe(periods=6, freq="M")
-        forecast = model.predict(future)
+        st.pyplot(fig)
 
-        st.line_chart(forecast.set_index("ds")["yhat"])
+        top_product = result.idxmax()
+
+        st.success(f"Insight: {top_product} generates the highest sales.")
+
+        st.info("Recommendation: Increase marketing investment for this category.")
+
+    # --------------------------------
+    # SALES TREND
+    # --------------------------------
+
+    elif "trend" in question or "growth" in question:
+
+        trend = sales.groupby("Date")["Sales"].sum()
+
+        st.subheader("Sales Trend")
+
+        fig, ax = plt.subplots()
+        trend.plot(ax=ax)
+
+        st.pyplot(fig)
+
+        change = trend.iloc[-1] - trend.iloc[0]
+
+        if change > 0:
+            st.success("Insight: Sales are showing an upward trend.")
+        else:
+            st.warning("Insight: Sales are declining.")
+
+    # --------------------------------
+    # RETURNS ANALYSIS
+    # --------------------------------
+
+    elif "return" in question:
+
+        result = returns.groupby("Product")["Returns"].sum()
+
+        st.subheader("Returns by Product")
+
+        fig, ax = plt.subplots()
+        result.plot(kind="bar", ax=ax)
+
+        st.pyplot(fig)
+
+        worst = result.idxmax()
+
+        st.warning(f"Insight: {worst} has the highest returns.")
+
+        st.info("Recommendation: Review product quality or logistics.")
+
+    # --------------------------------
+    # CANCELLATIONS
+    # --------------------------------
+
+    elif "cancel" in question:
+
+        result = returns.groupby("Product")["Cancellations"].sum()
+
+        st.subheader("Cancellations by Product")
+
+        fig, ax = plt.subplots()
+        result.plot(kind="bar", ax=ax)
+
+        st.pyplot(fig)
+
+        worst = result.idxmax()
+
+        st.warning(f"{worst} has the highest cancellations.")
+
+    # --------------------------------
+    # WEBSITE VISITS
+    # --------------------------------
+
+    elif "visit" in question or "traffic" in question:
+
+        traffic = website.groupby("Date")["Visits"].sum()
+
+        st.subheader("Website Visits Trend")
+
+        fig, ax = plt.subplots()
+        traffic.plot(ax=ax)
+
+        st.pyplot(fig)
+
+        st.success("Insight: Website traffic influences sales performance.")
+
+    # --------------------------------
+    # PRODUCT SHARE
+    # --------------------------------
+
+    elif "share" in question:
+
+        result = share.groupby("Product")["SalesSharePercent"].mean()
+
+        st.subheader("Market Share by Product")
+
+        fig, ax = plt.subplots()
+        result.plot(kind="pie", autopct="%1.1f%%", ax=ax)
+
+        st.pyplot(fig)
+
+        leader = result.idxmax()
+
+        st.success(f"{leader} dominates the product portfolio.")
+
+    # --------------------------------
+    # DEFAULT RESPONSE
+    # --------------------------------
 
     else:
 
-        prompt = f"""
-        You are a senior business analyst.
+        st.warning("AI could not understand the question.")
 
-        Dataset columns:
-        {list(data.columns)}
+        st.write("Try asking:")
 
-        Sample data:
-        {data.head(10)}
+        st.write("- Which product has highest sales?")
+        st.write("- Show sales trend")
+        st.write("- Which product has most returns?")
+        st.write("- Show website traffic trend")
 
-        Question:
-        {question}
+# ------------------------------
+# FOOTER
+# ------------------------------
 
-        Provide:
-        1. Answer
-        2. Key Insight
-        3. Business Recommendation
-        """
-
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role":"system","content":"You are an expert business data analyst"},
-                    {"role":"user","content":prompt}
-                ]
-            )
-
-            insight = response.choices[0].message.content
-
-            st.write("### AI Insight")
-            st.write(insight)
-
-        except Exception as e:
-            st.error("AI service unavailable. Please check API key or quota.")
+st.write("---")
+st.caption("AI Business Copilot for Data Analytics")
