@@ -122,6 +122,23 @@ if detected_product and "sales" in q:
     ax.set_title(f"Sales Trend - {detected_product}")
 
     st.pyplot(fig)
+
+
+elif "sales" in q:
+
+    result = sales.groupby("Product")["Sales"].sum()
+
+    fig, ax = plt.subplots()
+
+    result.plot(kind="bar", ax=ax)
+
+    ax.set_title("Sales by Product")
+
+    st.pyplot(fig)
+
+    leader = result.idxmax()
+
+    st.success(f"{leader} generates the highest revenue.")
     # ----------------------------
     # SALES BY PRODUCT
     # ----------------------------
@@ -283,6 +300,7 @@ if detected_product and "sales" in q:
 
 st.write("---")
 st.caption("Enterprise AI Analytics Platform | Powered by Rishikriti Technologies")
+
 
 
 
