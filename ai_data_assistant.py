@@ -19,7 +19,7 @@ st.subheader("Executive Dashboard")
 
 powerbi_url = "https://app.powerbi.com/view?r=YOUR_EMBED_LINK"
 
-st.components.v1.iframe(powerbi_url, height=500)
+st.image("powerbi_dashboard.png")
 
 # ----------------------------
 # LOAD DATA
@@ -266,3 +266,4 @@ if question:
 
 st.write("---")
 st.caption("Enterprise AI Analytics Platform | Powered by AI Copilot")
+
