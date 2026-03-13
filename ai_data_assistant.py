@@ -16,10 +16,7 @@ st.write("Power BI Dashboard + Kirti AI")
 # ----------------------------
 
 st.subheader("Executive Dashboard")
-
-powerbi_url = "https://app.powerbi.com/view?r=YOUR_EMBED_LINK"
-
-st.image("powerbi_dashboard.png")
+st.image("powerbi_dashboard.png", use_container_width=True)
 
 # ----------------------------
 # LOAD DATA
@@ -30,9 +27,13 @@ try:
     share = pd.read_csv("product_share.csv")
     returns = pd.read_csv("returns_data.csv")
     website = pd.read_csv("website_data.csv")
-except Exception as e:
+except Exception:
     st.error("Dataset loading failed. Check file names in GitHub.")
     st.stop()
+
+# Convert Date
+sales["Date"] = pd.to_datetime(sales["Date"])
+sales["Year"] = sales["Date"].dt.year
 
 # ----------------------------
 # DATA PREVIEW
@@ -54,7 +55,7 @@ if "Returns" in returns.columns:
 st.dataframe(preview.head())
 
 # ----------------------------
-# AI COPILOT
+# AI QUESTION BOX
 # ----------------------------
 
 st.subheader("AI Analysis")
@@ -69,76 +70,47 @@ if question:
 
     q = question.lower()
 
-    st.subheader("AI Analysis")
-
-    # Detect product names
     detected_product = None
 
     if "Product" in sales.columns:
         products = sales["Product"].unique()
-
         for p in products:
             if str(p).lower() in q:
                 detected_product = p
 
     # ----------------------------
-    # PRODUCT SALES
+    # PRODUCT SALES (TOTAL / AVERAGE)
     # ----------------------------
 
-if detected_product and "sales" in q:
+    if detected_product and "sales" in q:
 
-    data = sales[sales["Product"] == detected_product]
+        data = sales[sales["Product"] == detected_product]
 
-    # Detect year
-    year = None
+        # Detect year
+        year = None
+        if "2018" in q:
+            year = 2018
+        elif "2019" in q:
+            year = 2019
+        elif "2020" in q:
+            year = 2020
 
-    if "2018" in q:
-        year = 2018
-    elif "2019" in q:
-        year = 2019
-    elif "2020" in q:
-        year = 2020
+        if year:
+            data = data[data["Year"] == year]
 
-    if year:
-        data = data[data["Date"].astype(str).str.contains(str(year))]
+        # Average logic
+        if "average" in q or "mean" in q:
+            avg = data["Sales"].mean()
+            st.success(f"Average sales of {detected_product} in {year}: {round(avg,2)}")
+        else:
+            total = data["Sales"].sum()
+            st.success(f"Total sales of {detected_product}: {total}")
 
-    # Detect average
-    if "average" in q or "mean" in q:
+        fig, ax = plt.subplots()
+        data.groupby("Date")["Sales"].sum().plot(ax=ax)
+        ax.set_title(f"Sales Trend - {detected_product}")
+        st.pyplot(fig)
 
-        avg = data["Sales"].mean()
-
-        st.success(f"Average sales of {detected_product} in {year}: {round(avg,2)}")
-
-    else:
-
-        total = data["Sales"].sum()
-
-        st.success(f"Total sales of {detected_product}: {total}")
-
-    fig, ax = plt.subplots()
-
-    data.groupby("Date")["Sales"].sum().plot(ax=ax)
-
-    ax.set_title(f"Sales Trend - {detected_product}")
-
-    st.pyplot(fig)
-
-
-elif "sales" in q:
-
-    result = sales.groupby("Product")["Sales"].sum()
-
-    fig, ax = plt.subplots()
-
-    result.plot(kind="bar", ax=ax)
-
-    ax.set_title("Sales by Product")
-
-    st.pyplot(fig)
-
-    leader = result.idxmax()
-
-    st.success(f"{leader} generates the highest revenue.")
     # ----------------------------
     # SALES BY PRODUCT
     # ----------------------------
@@ -148,15 +120,11 @@ elif "sales" in q:
         result = sales.groupby("Product")["Sales"].sum()
 
         fig, ax = plt.subplots()
-
         result.plot(kind="bar", ax=ax)
-
         ax.set_title("Sales by Product")
-
         st.pyplot(fig)
 
         leader = result.idxmax()
-
         st.success(f"{leader} generates the highest revenue.")
 
     # ----------------------------
@@ -170,15 +138,11 @@ elif "sales" in q:
             result = returns.groupby("Product")["Returns"].sum()
 
             fig, ax = plt.subplots()
-
             result.plot(kind="bar", ax=ax)
-
             ax.set_title("Returns by Product")
-
             st.pyplot(fig)
 
             worst = result.idxmax()
-
             st.warning(f"{worst} has the highest return rate.")
 
     # ----------------------------
@@ -192,15 +156,11 @@ elif "sales" in q:
             result = returns.groupby("Product")["Cancellations"].sum()
 
             fig, ax = plt.subplots()
-
             result.plot(kind="bar", ax=ax)
-
             ax.set_title("Cancellations by Product")
-
             st.pyplot(fig)
 
             worst = result.idxmax()
-
             st.warning(f"{worst} experiences the highest cancellations.")
 
     # ----------------------------
@@ -212,15 +172,11 @@ elif "sales" in q:
         result = share.groupby("Product")["SalesSharePercent"].mean()
 
         fig, ax = plt.subplots()
-
         result.plot(kind="pie", autopct="%1.1f%%", ax=ax)
-
         ax.set_title("Product Sales Share")
-
         st.pyplot(fig)
 
         leader = result.idxmax()
-
         st.success(f"{leader} dominates the portfolio.")
 
     # ----------------------------
@@ -234,11 +190,8 @@ elif "sales" in q:
             trend = website.groupby("Date")["Visits"].sum()
 
             fig, ax = plt.subplots()
-
             trend.plot(ax=ax)
-
             ax.set_title("Website Traffic Trend")
-
             st.pyplot(fig)
 
             st.success("Website traffic trend generated.")
@@ -252,11 +205,8 @@ elif "sales" in q:
         trend = sales.groupby("Date")["Sales"].sum()
 
         fig, ax = plt.subplots()
-
         trend.plot(ax=ax)
-
         ax.set_title("Overall Sales Trend")
-
         st.pyplot(fig)
 
         if trend.iloc[-1] > trend.iloc[0]:
@@ -265,7 +215,7 @@ elif "sales" in q:
             st.warning("Sales appear to be declining.")
 
     # ----------------------------
-    # DEFAULT ANALYSIS
+    # DEFAULT RESPONSE
     # ----------------------------
 
     else:
@@ -275,11 +225,8 @@ elif "sales" in q:
         result = sales.groupby("Product")["Sales"].sum()
 
         fig, ax = plt.subplots()
-
         result.plot(kind="bar", ax=ax)
-
         ax.set_title("Overall Sales Overview")
-
         st.pyplot(fig)
 
         top = result.idxmax()
@@ -289,10 +236,10 @@ elif "sales" in q:
         )
 
         st.write("Try asking:")
+        st.write("• average sales of board games in 2018")
         st.write("• total sales of lego")
         st.write("• show sales trend")
         st.write("• product share analysis")
-        st.write("• website traffic trend")
 
 # ----------------------------
 # FOOTER
