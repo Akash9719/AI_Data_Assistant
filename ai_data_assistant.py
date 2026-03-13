@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # PAGE CONFIG
 # ----------------------------
 
-st.set_page_config(page_title="AI Analytics Platform", layout="wide")
+st.set_page_config(page_title="Enterprise AI Analytics Platform", layout="wide")
 
 st.title("Enterprise AI Analytics Platform")
 st.write("Power BI Dashboard + AI Copilot for Data Insights")
@@ -17,7 +17,7 @@ st.write("Power BI Dashboard + AI Copilot for Data Insights")
 
 st.subheader("Executive Dashboard")
 
-powerbi_url = "PASTE_POWERBI_EMBED_URL_HERE"
+powerbi_url = "https://app.powerbi.com/view?r=YOUR_EMBED_LINK"
 
 st.components.v1.iframe(powerbi_url, height=500)
 
@@ -25,10 +25,14 @@ st.components.v1.iframe(powerbi_url, height=500)
 # LOAD DATA
 # ----------------------------
 
-sales = pd.read_csv("sales_data.csv")
-share = pd.read_csv("product_share.csv")
-returns = pd.read_csv("returns_data.csv")
-website = pd.read_csv("website_data.csv")
+try:
+    sales = pd.read_csv("sales_data.csv")
+    share = pd.read_csv("product_share.csv")
+    returns = pd.read_csv("returns_data.csv")
+    website = pd.read_csv("website_data.csv")
+except Exception as e:
+    st.error("Dataset loading failed. Check file names in GitHub.")
+    st.stop()
 
 # ----------------------------
 # DATA PREVIEW
@@ -37,9 +41,15 @@ website = pd.read_csv("website_data.csv")
 st.subheader("Dataset Preview")
 
 preview = sales.copy()
-preview["SalesSharePercent"] = share["SalesSharePercent"]
-preview["Cancellations"] = returns["Cancellations"]
-preview["Returns"] = returns["Returns"]
+
+if "SalesSharePercent" in share.columns:
+    preview["SalesSharePercent"] = share["SalesSharePercent"]
+
+if "Cancellations" in returns.columns:
+    preview["Cancellations"] = returns["Cancellations"]
+
+if "Returns" in returns.columns:
+    preview["Returns"] = returns["Returns"]
 
 st.dataframe(preview.head())
 
@@ -59,15 +69,17 @@ if question:
 
     q = question.lower()
 
-    products = sales["Product"].unique()
+    st.subheader("AI Analysis")
 
+    # Detect product names
     detected_product = None
 
-    for p in products:
-        if p.lower() in q:
-            detected_product = p
+    if "Product" in sales.columns:
+        products = sales["Product"].unique()
 
-    st.subheader("AI Analysis")
+        for p in products:
+            if str(p).lower() in q:
+                detected_product = p
 
     # ----------------------------
     # PRODUCT SALES
@@ -90,7 +102,7 @@ if question:
         st.pyplot(fig)
 
         st.info(
-            f"{detected_product} contributes strongly to overall revenue performance."
+            f"{detected_product} contributes significantly to revenue performance."
         )
 
     # ----------------------------
@@ -113,29 +125,27 @@ if question:
 
         st.success(f"{leader} generates the highest revenue.")
 
-        st.write("Recommendation: Focus marketing on the top product category.")
-
     # ----------------------------
     # RETURNS ANALYSIS
     # ----------------------------
 
     elif "return" in q:
 
-        result = returns.groupby("Product")["Returns"].sum()
+        if "Product" in returns.columns:
 
-        fig, ax = plt.subplots()
+            result = returns.groupby("Product")["Returns"].sum()
 
-        result.plot(kind="bar", ax=ax)
+            fig, ax = plt.subplots()
 
-        ax.set_title("Returns by Product")
+            result.plot(kind="bar", ax=ax)
 
-        st.pyplot(fig)
+            ax.set_title("Returns by Product")
 
-        worst = result.idxmax()
+            st.pyplot(fig)
 
-        st.warning(f"{worst} has the highest return rate.")
+            worst = result.idxmax()
 
-        st.write("Recommendation: Investigate product quality or logistics.")
+            st.warning(f"{worst} has the highest return rate.")
 
     # ----------------------------
     # CANCELLATIONS
@@ -143,19 +153,21 @@ if question:
 
     elif "cancel" in q:
 
-        result = returns.groupby("Product")["Cancellations"].sum()
+        if "Product" in returns.columns:
 
-        fig, ax = plt.subplots()
+            result = returns.groupby("Product")["Cancellations"].sum()
 
-        result.plot(kind="bar", ax=ax)
+            fig, ax = plt.subplots()
 
-        ax.set_title("Cancellations by Product")
+            result.plot(kind="bar", ax=ax)
 
-        st.pyplot(fig)
+            ax.set_title("Cancellations by Product")
 
-        worst = result.idxmax()
+            st.pyplot(fig)
 
-        st.warning(f"{worst} experiences the highest cancellations.")
+            worst = result.idxmax()
+
+            st.warning(f"{worst} experiences the highest cancellations.")
 
     # ----------------------------
     # PRODUCT SHARE
@@ -175,7 +187,7 @@ if question:
 
         leader = result.idxmax()
 
-        st.success(f"{leader} dominates the product portfolio.")
+        st.success(f"{leader} dominates the portfolio.")
 
     # ----------------------------
     # WEBSITE TRAFFIC
@@ -183,17 +195,19 @@ if question:
 
     elif "traffic" in q or "visit" in q:
 
-        trend = website.groupby("Date")["Visits"].sum()
+        if "Visits" in website.columns:
 
-        fig, ax = plt.subplots()
+            trend = website.groupby("Date")["Visits"].sum()
 
-        trend.plot(ax=ax)
+            fig, ax = plt.subplots()
 
-        ax.set_title("Website Traffic Trend")
+            trend.plot(ax=ax)
 
-        st.pyplot(fig)
+            ax.set_title("Website Traffic Trend")
 
-        st.success("Website traffic trend generated.")
+            st.pyplot(fig)
+
+            st.success("Website traffic trend generated.")
 
     # ----------------------------
     # SALES TREND
@@ -212,11 +226,8 @@ if question:
         st.pyplot(fig)
 
         if trend.iloc[-1] > trend.iloc[0]:
-
             st.success("Sales show positive growth over time.")
-
         else:
-
             st.warning("Sales appear to be declining.")
 
     # ----------------------------
