@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from pandasai import SmartDataframe
-from pandasai.llm.openai import OpenAI
 
 # -----------------------------
 # PAGE CONFIG
