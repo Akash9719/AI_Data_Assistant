@@ -4,3 +4,4 @@ openai
 matplotlib
 prophet
 pandasai
+reportlab
