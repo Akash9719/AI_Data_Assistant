@@ -2,42 +2,47 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# ----------------------------
+from pandasai import SmartDataframe
+from pandasai.llm.openai import OpenAI
+
+# -----------------------------
 # PAGE CONFIG
-# ----------------------------
+# -----------------------------
 
 st.set_page_config(page_title="Enterprise AI Analytics Platform", layout="wide")
 
 st.title("Enterprise AI Analytics Platform")
-st.write("Power BI Dashboard + Kirti AI")
+st.write("Power BI Dashboard + AI Copilot for Business Insights")
 
-# ----------------------------
-# POWER BI DASHBOARD
-# ----------------------------
+# -----------------------------
+# EXECUTIVE DASHBOARD
+# -----------------------------
 
 st.subheader("Executive Dashboard")
+
 st.image("powerbi_dashboard.png", use_container_width=True)
 
-# ----------------------------
+# -----------------------------
 # LOAD DATA
-# ----------------------------
+# -----------------------------
 
 try:
+
     sales = pd.read_csv("sales_data.csv")
     share = pd.read_csv("product_share.csv")
     returns = pd.read_csv("returns_data.csv")
     website = pd.read_csv("website_data.csv")
-except Exception:
+
+except:
     st.error("Dataset loading failed. Check file names in GitHub.")
     st.stop()
 
-# Convert Date
 sales["Date"] = pd.to_datetime(sales["Date"])
 sales["Year"] = sales["Date"].dt.year
 
-# ----------------------------
+# -----------------------------
 # DATA PREVIEW
-# ----------------------------
+# -----------------------------
 
 st.subheader("Dataset Preview")
 
@@ -54,196 +59,86 @@ if "Returns" in returns.columns:
 
 st.dataframe(preview.head())
 
-# ----------------------------
-# AI QUESTION BOX
-# ----------------------------
+# -----------------------------
+# AUTO AI INSIGHTS
+# -----------------------------
 
-st.subheader("AI Analysis")
+st.subheader("AI Executive Insights")
+
+top_product = sales.groupby("Product")["Sales"].sum().idxmax()
+top_value = sales.groupby("Product")["Sales"].sum().max()
+
+highest_returns = returns.groupby("Product")["Returns"].sum().idxmax()
+
+traffic_growth = website["Visits"].iloc[-1] - website["Visits"].iloc[0]
+
+st.success(f"Top Product: {top_product} generates the highest revenue ({top_value}).")
+
+st.warning(f"Returns Insight: {highest_returns} has the highest product returns.")
+
+if traffic_growth > 0:
+    st.info("Website traffic is growing over time, indicating increasing demand.")
+else:
+    st.info("Website traffic is declining and may require marketing intervention.")
+
+# -----------------------------
+# SALES VISUALIZATION
+# -----------------------------
+
+st.subheader("Sales Overview")
+
+sales_by_product = sales.groupby("Product")["Sales"].sum()
+
+fig, ax = plt.subplots()
+
+sales_by_product.plot(kind="bar", ax=ax)
+
+ax.set_title("Total Sales by Product")
+
+st.pyplot(fig)
+
+# -----------------------------
+# AI COPILOT SETUP
+# -----------------------------
+
+st.subheader("AI Data Copilot")
 
 question = st.text_input("Ask business questions about your data")
 
-# ----------------------------
-# AI ANALYSIS ENGINE
-# ----------------------------
+# Combine datasets
+
+data = sales.merge(share, on=["Product","Date"], how="left")
+
+data = data.merge(returns, on=["Product","Date"], how="left")
+
+# AI Model
+
+llm = OpenAI(api_token="YOUR_OPENAI_API_KEY")
+
+ai_df = SmartDataframe(data, config={"llm": llm})
+
+# -----------------------------
+# AI QUESTION ENGINE
+# -----------------------------
 
 if question:
 
-    q = question.lower()
+    st.write("Generating AI insight...")
 
-    detected_product = None
+    try:
 
-    if "Product" in sales.columns:
-        products = sales["Product"].unique()
-        for p in products:
-            if str(p).lower() in q:
-                detected_product = p
+        result = ai_df.chat(question)
 
-    # ----------------------------
-    # PRODUCT SALES (TOTAL / AVERAGE)
-    # ----------------------------
+        st.write(result)
 
-    if detected_product and "sales" in q:
+    except:
 
-        data = sales[sales["Product"] == detected_product]
+        st.error("AI could not understand the question. Try rephrasing.")
 
-        # Detect year
-        year = None
-        if "2018" in q:
-            year = 2018
-        elif "2019" in q:
-            year = 2019
-        elif "2020" in q:
-            year = 2020
-
-        if year:
-            data = data[data["Year"] == year]
-
-        # Average logic
-        if "average" in q or "mean" in q:
-            avg = data["Sales"].mean()
-            st.success(f"Average sales of {detected_product} in {year}: {round(avg,2)}")
-        else:
-            total = data["Sales"].sum()
-            st.success(f"Total sales of {detected_product}: {total}")
-
-        fig, ax = plt.subplots()
-        data.groupby("Date")["Sales"].sum().plot(ax=ax)
-        ax.set_title(f"Sales Trend - {detected_product}")
-        st.pyplot(fig)
-
-    # ----------------------------
-    # SALES BY PRODUCT
-    # ----------------------------
-
-    elif "sales" in q:
-
-        result = sales.groupby("Product")["Sales"].sum()
-
-        fig, ax = plt.subplots()
-        result.plot(kind="bar", ax=ax)
-        ax.set_title("Sales by Product")
-        st.pyplot(fig)
-
-        leader = result.idxmax()
-        st.success(f"{leader} generates the highest revenue.")
-
-    # ----------------------------
-    # RETURNS ANALYSIS
-    # ----------------------------
-
-    elif "return" in q:
-
-        if "Product" in returns.columns:
-
-            result = returns.groupby("Product")["Returns"].sum()
-
-            fig, ax = plt.subplots()
-            result.plot(kind="bar", ax=ax)
-            ax.set_title("Returns by Product")
-            st.pyplot(fig)
-
-            worst = result.idxmax()
-            st.warning(f"{worst} has the highest return rate.")
-
-    # ----------------------------
-    # CANCELLATIONS
-    # ----------------------------
-
-    elif "cancel" in q:
-
-        if "Product" in returns.columns:
-
-            result = returns.groupby("Product")["Cancellations"].sum()
-
-            fig, ax = plt.subplots()
-            result.plot(kind="bar", ax=ax)
-            ax.set_title("Cancellations by Product")
-            st.pyplot(fig)
-
-            worst = result.idxmax()
-            st.warning(f"{worst} experiences the highest cancellations.")
-
-    # ----------------------------
-    # PRODUCT SHARE
-    # ----------------------------
-
-    elif "share" in q:
-
-        result = share.groupby("Product")["SalesSharePercent"].mean()
-
-        fig, ax = plt.subplots()
-        result.plot(kind="pie", autopct="%1.1f%%", ax=ax)
-        ax.set_title("Product Sales Share")
-        st.pyplot(fig)
-
-        leader = result.idxmax()
-        st.success(f"{leader} dominates the portfolio.")
-
-    # ----------------------------
-    # WEBSITE TRAFFIC
-    # ----------------------------
-
-    elif "traffic" in q or "visit" in q:
-
-        if "Visits" in website.columns:
-
-            trend = website.groupby("Date")["Visits"].sum()
-
-            fig, ax = plt.subplots()
-            trend.plot(ax=ax)
-            ax.set_title("Website Traffic Trend")
-            st.pyplot(fig)
-
-            st.success("Website traffic trend generated.")
-
-    # ----------------------------
-    # SALES TREND
-    # ----------------------------
-
-    elif "trend" in q or "growth" in q:
-
-        trend = sales.groupby("Date")["Sales"].sum()
-
-        fig, ax = plt.subplots()
-        trend.plot(ax=ax)
-        ax.set_title("Overall Sales Trend")
-        st.pyplot(fig)
-
-        if trend.iloc[-1] > trend.iloc[0]:
-            st.success("Sales show positive growth over time.")
-        else:
-            st.warning("Sales appear to be declining.")
-
-    # ----------------------------
-    # DEFAULT RESPONSE
-    # ----------------------------
-
-    else:
-
-        st.info("AI generating overall business insight...")
-
-        result = sales.groupby("Product")["Sales"].sum()
-
-        fig, ax = plt.subplots()
-        result.plot(kind="bar", ax=ax)
-        ax.set_title("Overall Sales Overview")
-        st.pyplot(fig)
-
-        top = result.idxmax()
-
-        st.success(
-            f"Based on current data, {top} is the top performing product category."
-        )
-
-        st.write("Try asking:")
-        st.write("• average sales of board games in 2018")
-        st.write("• total sales of lego")
-        st.write("• show sales trend")
-        st.write("• product share analysis")
-
-# ----------------------------
+# -----------------------------
 # FOOTER
-# ----------------------------
+# -----------------------------
 
 st.write("---")
+
 st.caption("Enterprise AI Analytics Platform | Powered by Rishikriti Technologies")
