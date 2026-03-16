@@ -118,7 +118,7 @@ if page == "Dashboard":
     # COPILOT
     with col2:
 
-        st.subheader("AI Data Copilot")
+        st.subheader("AI Assistant")
 
         question = st.text_input(
             "Ask a business question",
