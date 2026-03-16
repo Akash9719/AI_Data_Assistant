@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from io import BytesIO
 
 # -----------------------------
 # PAGE CONFIG
@@ -9,253 +12,278 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Enterprise AI Analytics Platform", layout="wide")
 
 st.title("Enterprise AI Analytics Platform")
-st.write("Power BI Dashboard + AI Copilot for Business Insights")
-
-# -----------------------------
-# EXECUTIVE DASHBOARD
-# -----------------------------
-
-st.subheader("Executive Dashboard")
-st.image("powerbi_dashboard.png", use_container_width=True)
 
 # -----------------------------
 # LOAD DATA
 # -----------------------------
 
-try:
-    sales = pd.read_csv("sales_data.csv")
-    share = pd.read_csv("product_share.csv")
-    returns = pd.read_csv("returns_data.csv")
-    website = pd.read_csv("website_data.csv")
-except:
-    st.error("Dataset loading failed. Check file names in GitHub.")
-    st.stop()
+sales = pd.read_csv("sales_data.csv")
+share = pd.read_csv("product_share.csv")
+returns = pd.read_csv("returns_data.csv")
+website = pd.read_csv("website_data.csv")
 
 sales["Date"] = pd.to_datetime(sales["Date"])
 sales["Year"] = sales["Date"].dt.year
 
 # -----------------------------
-# KPI PANEL
+# GENERATE EXECUTIVE PDF REPORT
 # -----------------------------
 
-st.subheader("Key Business Metrics")
+def generate_pdf_report():
 
-col1, col2, col3, col4 = st.columns(4)
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
 
-total_revenue = sales["Sales"].sum()
-top_product = sales.groupby("Product")["Sales"].sum().idxmax()
+    width, height = letter
 
-return_rate = (returns["Returns"].sum() / sales["Sales"].sum()) * 100
+    # Title
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, height - 50, "Enterprise AI Analytics Executive Report")
 
-traffic_growth = website["Visits"].iloc[-1] - website["Visits"].iloc[0]
+    c.setFont("Helvetica", 12)
 
-col1.metric("Total Revenue", round(total_revenue,2))
-col2.metric("Top Product", top_product)
-col3.metric("Return Rate", f"{round(return_rate,2)}%")
-col4.metric("Traffic Growth", traffic_growth)
+    # Business Metrics
+    total_revenue = sales["Sales"].sum()
+    top_product = sales.groupby("Product")["Sales"].sum().idxmax()
+    return_summary = returns.groupby("Product")["Returns"].sum()
+    high_returns = return_summary.idxmax()
+
+    first_visit = website["Visits"].iloc[0]
+    last_visit = website["Visits"].iloc[-1]
+
+    traffic_trend = "Increasing" if last_visit > first_visit else "Declining"
+
+    y = height - 100
+
+    c.drawString(50, y, f"Total Revenue: {round(total_revenue,2)}")
+    y -= 25
+
+    c.drawString(50, y, f"Top Product: {top_product}")
+    y -= 25
+
+    c.drawString(50, y, f"Highest Returns Product: {high_returns}")
+    y -= 25
+
+    c.drawString(50, y, f"Website Traffic Trend: {traffic_trend}")
+    y -= 40
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Strategic Recommendations")
+    y -= 25
+
+    c.setFont("Helvetica", 11)
+
+    c.drawString(50, y, f"- Increase marketing focus on {top_product}")
+    y -= 20
+
+    c.drawString(50, y, f"- Investigate return causes for {high_returns}")
+    y -= 20
+
+    c.drawString(50, y, "- Monitor website engagement trends")
+
+    c.save()
+
+    buffer.seek(0)
+
+    return buffer
+
+
 
 # -----------------------------
-# DATASET PREVIEW
+# SIDEBAR NAVIGATION
 # -----------------------------
 
-st.subheader("Dataset Preview")
+st.sidebar.title("Navigation")
 
-preview = sales.copy()
-
-if "SalesSharePercent" in share.columns:
-    preview["SalesSharePercent"] = share["SalesSharePercent"]
-
-if "Cancellations" in returns.columns:
-    preview["Cancellations"] = returns["Cancellations"]
-
-if "Returns" in returns.columns:
-    preview["Returns"] = returns["Returns"]
-
-st.dataframe(preview.head())
+page = st.sidebar.radio(
+    "Go to",
+    [
+        "Dashboard",
+        "AI Copilot",
+        "Dataset Explorer",
+        "Executive Insights"
+    ]
+)
 
 # -----------------------------
-# SIDEBAR AI COPILOT
+# DASHBOARD PAGE
 # -----------------------------
 
-st.sidebar.title("AI Data Copilot")
+if page == "Dashboard":
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.subheader("Executive Dashboard")
 
-for msg in st.session_state.messages:
+    st.image("powerbi_dashboard.png", use_container_width=True)
 
-    if msg["role"] == "user":
-        st.sidebar.chat_message("user").write(msg["content"])
+    st.subheader("Key Business Metrics")
 
-    else:
-        st.sidebar.chat_message("assistant").write(msg["content"])
+    col1, col2, col3, col4 = st.columns(4)
 
-prompt = st.sidebar.chat_input("Ask about your business data")
+    total_revenue = sales["Sales"].sum()
+    top_product = sales.groupby("Product")["Sales"].sum().idxmax()
+    return_rate = (returns["Returns"].sum() / sales["Sales"].sum()) * 100
+    traffic_growth = website["Visits"].iloc[-1] - website["Visits"].iloc[0]
+
+    col1.metric("Total Revenue", round(total_revenue,2))
+    col2.metric("Top Product", top_product)
+    col3.metric("Return Rate", f"{round(return_rate,2)}%")
+    col4.metric("Traffic Growth", traffic_growth)
 
 # -----------------------------
-# AI QUESTION ENGINE
+# DATASET EXPLORER
 # -----------------------------
 
-if prompt:
+elif page == "Dataset Explorer":
 
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.subheader("Dataset Explorer")
 
-    q = prompt.lower()
+    dataset_choice = st.selectbox(
+        "Select dataset",
+        ["Sales", "Returns", "Product Share", "Website Traffic"]
+    )
 
-    response_text = "AI could not understand the question."
+    if dataset_choice == "Sales":
+        st.dataframe(sales)
 
-    with st.sidebar.chat_message("assistant"):
+    elif dataset_choice == "Returns":
+        st.dataframe(returns)
+
+    elif dataset_choice == "Product Share":
+        st.dataframe(share)
+
+    elif dataset_choice == "Website Traffic":
+        st.dataframe(website)
+
+# -----------------------------
+# AI COPILOT PAGE
+# -----------------------------
+
+elif page == "AI Copilot":
+
+    st.subheader("AI Data Copilot")
+
+    question = st.text_input(
+        "Ask a business question",
+        placeholder="Example: average sales of board games in 2018"
+    )
+
+    if question:
+
+        q = question.lower()
+
+        detected_product = None
+        products = sales["Product"].unique()
+
+        for p in products:
+            if str(p).lower() in q:
+                detected_product = p
 
         # TOTAL SALES
         if "total sales" in q or "total revenue" in q:
 
             total_sales = sales["Sales"].sum()
 
-            response_text = f"Total sales across all products: {round(total_sales,2)}"
-
-            st.success(response_text)
+            st.success(f"Total sales across all products: {round(total_sales,2)}")
 
         # TOTAL RETURNS
         elif "total returns" in q:
 
             total_returns = returns["Returns"].sum()
 
-            response_text = f"Total returns across all products: {total_returns}"
+            st.success(f"Total returns across all products: {total_returns}")
 
-            st.success(response_text)
+        # PRODUCT SALES
+        elif detected_product and "sales" in q:
 
-        else:
+            data = sales[sales["Product"] == detected_product]
 
-            detected_product = None
+            year = None
 
-            products = sales["Product"].unique()
+            if "2018" in q:
+                year = 2018
+            elif "2019" in q:
+                year = 2019
+            elif "2020" in q:
+                year = 2020
 
-            for p in products:
-                if str(p).lower() in q:
-                    detected_product = p
+            if year:
+                data = data[data["Year"] == year]
 
-            # PRODUCT SALES
-            if detected_product and "sales" in q:
+            if "average" in q:
 
-                data = sales[sales["Product"] == detected_product]
+                avg = data["Sales"].mean()
 
-                year = None
-
-                if "2018" in q:
-                    year = 2018
-                elif "2019" in q:
-                    year = 2019
-                elif "2020" in q:
-                    year = 2020
-
-                if year:
-                    data = data[data["Year"] == year]
-
-                if "average" in q:
-
-                    avg = data["Sales"].mean()
-
-                    response_text = f"Average sales of {detected_product} in {year}: {round(avg,2)}"
-
-                    st.success(response_text)
-
-                else:
-
-                    total = data["Sales"].sum()
-
-                    response_text = f"Total sales of {detected_product}: {total}"
-
-                    st.success(response_text)
-
-                fig, ax = plt.subplots()
-
-                data.groupby("Date")["Sales"].sum().plot(ax=ax)
-
-                ax.set_title(f"Sales Trend - {detected_product}")
-
-                st.pyplot(fig)
-
-            # RETURNS ANALYSIS
-            elif "return" in q:
-
-                result = returns.groupby("Product")["Returns"].sum()
-
-                response_text = "Return analysis generated."
-
-                st.info(response_text)
-
-                fig, ax = plt.subplots()
-
-                result.plot(kind="bar", ax=ax)
-
-                ax.set_title("Returns by Product")
-
-                st.pyplot(fig)
-
-            # PRODUCT SHARE
-            elif "share" in q:
-
-                result = share.groupby("Product")["SalesSharePercent"].mean()
-
-                response_text = "Product share analysis generated."
-
-                st.info(response_text)
-
-                fig, ax = plt.subplots()
-
-                result.plot(kind="pie", autopct="%1.1f%%", ax=ax)
-
-                ax.set_title("Product Share")
-
-                st.pyplot(fig)
-
-            # TRAFFIC TREND
-            elif "traffic" in q or "visit" in q:
-
-                trend = website.groupby("Date")["Visits"].sum()
-
-                response_text = "Website traffic trend generated."
-
-                st.info(response_text)
-
-                fig, ax = plt.subplots()
-
-                trend.plot(ax=ax)
-
-                ax.set_title("Website Traffic Trend")
-
-                st.pyplot(fig)
-
-            # SALES TREND
-            elif "trend" in q:
-
-                trend = sales.groupby("Date")["Sales"].sum()
-
-                response_text = "Sales trend generated."
-
-                st.info(response_text)
-
-                fig, ax = plt.subplots()
-
-                trend.plot(ax=ax)
-
-                ax.set_title("Sales Trend")
-
-                st.pyplot(fig)
+                st.success(
+                    f"Average sales of {detected_product} in {year}: {round(avg,2)}"
+                )
 
             else:
 
-                st.warning(response_text)
+                total = data["Sales"].sum()
 
-    st.session_state.messages.append({"role": "assistant", "content": response_text})
+                st.success(f"Total sales of {detected_product}: {total}")
 
-    # -----------------------------
-    # AI EXECUTIVE REPORT
-    # -----------------------------
+            fig, ax = plt.subplots()
 
-    st.subheader("AI Executive Report")
+            data.groupby("Date")["Sales"].sum().plot(ax=ax)
+
+            ax.set_title(f"Sales Trend - {detected_product}")
+
+            st.pyplot(fig)
+
+        # RETURNS ANALYSIS
+        elif "return" in q:
+
+            result = returns.groupby("Product")["Returns"].sum()
+
+            fig, ax = plt.subplots()
+
+            result.plot(kind="bar", ax=ax)
+
+            ax.set_title("Returns by Product")
+
+            st.pyplot(fig)
+
+        # TRAFFIC TREND
+        elif "traffic" in q or "visit" in q:
+
+            trend = website.groupby("Date")["Visits"].sum()
+
+            fig, ax = plt.subplots()
+
+            trend.plot(ax=ax)
+
+            ax.set_title("Website Traffic Trend")
+
+            st.pyplot(fig)
+
+        # SALES TREND
+        elif "trend" in q:
+
+            trend = sales.groupby("Date")["Sales"].sum()
+
+            fig, ax = plt.subplots()
+
+            trend.plot(ax=ax)
+
+            ax.set_title("Sales Trend")
+
+            st.pyplot(fig)
+
+        else:
+
+            st.warning("AI could not understand the question.")
+
+# -----------------------------
+# EXECUTIVE INSIGHTS PAGE
+# -----------------------------
+
+elif page == "Executive Insights":
+
+    st.subheader("AI Executive Insights")
 
     sales_summary = sales.groupby("Product")["Sales"].sum()
+
     top_product = sales_summary.idxmax()
     top_sales = sales_summary.max()
 
@@ -288,8 +316,16 @@ if prompt:
     st.write("• Monitor website engagement to optimize marketing performance.")
 
 # -----------------------------
-# FOOTER
+# DOWNLOAD EXECUTIVE REPORT
 # -----------------------------
 
-st.write("---")
-st.caption("Enterprise AI Analytics Platform | Powered by Rishikriti Technologies")
+st.subheader("Download Executive Report")
+
+pdf_file = generate_pdf_report()
+
+st.download_button(
+    label="Download AI Executive Report (PDF)",
+    data=pdf_file,
+    file_name="AI_Executive_Report.pdf",
+    mime="application/pdf"
+)
