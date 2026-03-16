@@ -70,7 +70,6 @@ def generate_pdf():
     c.drawString(50,y,"- Monitor website engagement trends")
 
     c.save()
-
     buffer.seek(0)
 
     return buffer
@@ -121,138 +120,138 @@ if page == "Dashboard":
     # -----------------------------
     # AI ASSISTANT (CHAT STYLE)
     # -----------------------------
-    
+
     with col2:
-    
+
         st.subheader("AI Assistant")
-    
+
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
-    
+
         # DISPLAY CHAT HISTORY
+
         for chat in st.session_state.chat_history:
-    
+
             with st.chat_message(chat["role"]):
-    
+
                 st.write(chat["content"])
-    
-                if "chart" in chat:
-                    st.pyplot(chat["chart"])
-    
+
+                if chat.get("chart") == "sales_trend":
+
+                    product = chat["product"]
+
+                    data = sales[sales["Product"]==product]
+
+                    fig,ax = plt.subplots()
+                    data.groupby("Date")["Sales"].sum().plot(ax=ax)
+
+                    ax.set_title(f"Sales Trend - {product}")
+                    st.pyplot(fig)
+
+                elif chat.get("chart") == "returns":
+
+                    result = returns.groupby("Product")["Returns"].sum()
+
+                    fig,ax = plt.subplots()
+                    result.plot(kind="bar",ax=ax)
+
+                    ax.set_title("Returns by Product")
+                    st.pyplot(fig)
+
+                elif chat.get("chart") == "traffic":
+
+                    trend = website.groupby("Date")["Visits"].sum()
+
+                    fig,ax = plt.subplots()
+                    trend.plot(ax=ax)
+
+                    ax.set_title("Website Traffic Trend")
+                    st.pyplot(fig)
+
         question = st.chat_input("Ask a business question")
-    
+
         if question:
-    
+
             st.session_state.chat_history.append(
                 {"role":"user","content":question}
             )
-    
+
             q = question.lower()
-    
+
             detected_product = None
             products = sales["Product"].unique()
-    
+
             for p in products:
                 if str(p).lower() in q:
                     detected_product = p
-    
-            response = ""
-            chart = None
-    
+
+            response = {}
+            response["role"] = "assistant"
+
             # TOTAL SALES
+
             if "total sales" in q or "total revenue" in q:
-    
+
                 total_sales = sales["Sales"].sum()
-                response = f"Total Sales: {round(total_sales,2)}"
-    
+                response["content"] = f"Total Sales: {round(total_sales,2)}"
+
             # TOTAL RETURNS
+
             elif "total returns" in q:
-    
+
                 total_returns = returns["Returns"].sum()
-                response = f"Total Returns: {total_returns}"
-    
+                response["content"] = f"Total Returns: {total_returns}"
+
             # PRODUCT SALES
+
             elif detected_product and "sales" in q:
-    
+
                 data = sales[sales["Product"]==detected_product]
-    
+
                 if "average" in q:
-    
+
                     avg = data["Sales"].mean()
-                    response = f"Average sales of {detected_product}: {round(avg,2)}"
-    
+                    response["content"] = f"Average sales of {detected_product}: {round(avg,2)}"
+
                 else:
-    
+
                     total = data["Sales"].sum()
-                    response = f"Total sales of {detected_product}: {total}"
-    
-                fig,ax = plt.subplots()
-    
-                data.groupby("Date")["Sales"].sum().plot(ax=ax)
-    
-                ax.set_title(f"Sales Trend - {detected_product}")
-    
-                chart = fig
-    
+                    response["content"] = f"Total sales of {detected_product}: {total}"
+
+                response["chart"] = "sales_trend"
+                response["product"] = detected_product
+
             # RETURNS ANALYSIS
+
             elif "return" in q:
-    
-                result = returns.groupby("Product")["Returns"].sum()
-    
-                fig,ax = plt.subplots()
-    
-                result.plot(kind="bar",ax=ax)
-    
-                ax.set_title("Returns by Product")
-    
-                chart = fig
-    
-                response = "Here is the returns analysis."
-    
+
+                response["content"] = "Here is the returns analysis by product."
+                response["chart"] = "returns"
+
             # TRAFFIC TREND
+
             elif "traffic" in q or "visit" in q:
-    
-                trend = website.groupby("Date")["Visits"].sum()
-    
-                fig,ax = plt.subplots()
-    
-                trend.plot(ax=ax)
-    
-                ax.set_title("Website Traffic Trend")
-    
-                chart = fig
-    
-                response = "Here is the website traffic trend."
-    
+
+                response["content"] = "Here is the website traffic trend."
+                response["chart"] = "traffic"
+
             else:
-    
-                response = "I could not understand the question."
-    
-            assistant_message = {
-                "role":"assistant",
-                "content":response
-            }
-    
-            if chart:
-                assistant_message["chart"] = chart
-    
-            st.session_state.chat_history.append(assistant_message)
-    
-            with st.chat_message("assistant"):
-    
-                st.write(response)
-    
-                if chart:
-                    st.pyplot(chart)
-    
+
+                response["content"] = "I could not understand the question."
+
+            st.session_state.chat_history.append(response)
+
+            st.rerun()
+
         st.write("### Suggested Questions")
-    
+
         st.markdown("""
         • What is total sales  
         • What are total returns  
         • Average sales of board games  
         • Show sales trend  
         """)
+
 # -----------------------------
 # DATASET EXPLORER
 # -----------------------------
