@@ -6,10 +6,7 @@ import matplotlib.pyplot as plt
 # PAGE CONFIG
 # -----------------------------
 
-st.set_page_config(
-    page_title="Enterprise AI Analytics Platform",
-    layout="wide"
-)
+st.set_page_config(page_title="Enterprise AI Analytics Platform", layout="wide")
 
 st.title("Enterprise AI Analytics Platform")
 st.write("Power BI Dashboard + AI Copilot for Business Insights")
@@ -49,13 +46,13 @@ col1, col2, col3, col4 = st.columns(4)
 
 total_revenue = sales["Sales"].sum()
 top_product = sales.groupby("Product")["Sales"].sum().idxmax()
-return_rate = returns["Returns"].sum()
+total_returns = returns["Returns"].sum()
 traffic_growth = website["Visits"].iloc[-1] - website["Visits"].iloc[0]
 
-col1.metric("Total Revenue", f"{total_revenue}")
+col1.metric("Total Revenue", total_revenue)
 col2.metric("Top Product", top_product)
-col3.metric("Total Returns", f"{return_rate}")
-col4.metric("Traffic Growth", f"{traffic_growth}")
+col3.metric("Total Returns", total_returns)
+col4.metric("Traffic Growth", traffic_growth)
 
 # -----------------------------
 # DATASET PREVIEW
@@ -76,55 +73,47 @@ if "Returns" in returns.columns:
 
 st.dataframe(preview.head())
 
-
 # -----------------------------
-# AI COPILOT SECTION
+# SIDEBAR AI COPILOT
 # -----------------------------
 
-st.subheader("AI Data Copilot")
+st.sidebar.title("AI Data Copilot")
 
-# Create chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display previous chat messages
 for msg in st.session_state.messages:
 
     if msg["role"] == "user":
-        st.chat_message("user").write(msg["content"])
+        st.sidebar.chat_message("user").write(msg["content"])
 
     else:
-        st.chat_message("assistant").write(msg["content"])
+        st.sidebar.chat_message("assistant").write(msg["content"])
 
+prompt = st.sidebar.chat_input("Ask about your business data")
 
-# Chat input
-prompt = st.chat_input("Ask a question about your business data")
+# -----------------------------
+# AI QUESTION ENGINE
+# -----------------------------
 
 if prompt:
 
-    # Save user message
     st.session_state.messages.append({"role": "user", "content": prompt})
-
-    st.chat_message("user").write(prompt)
 
     q = prompt.lower()
 
-    response_text = "AI could not understand the question."
-
     detected_product = None
-
     products = sales["Product"].unique()
 
     for p in products:
         if str(p).lower() in q:
             detected_product = p
 
-    with st.chat_message("assistant"):
+    response_text = "AI could not understand the question."
 
-        # -----------------------------
+    with st.sidebar.chat_message("assistant"):
+
         # PRODUCT SALES
-        # -----------------------------
-
         if detected_product and "sales" in q:
 
             data = sales[sales["Product"] == detected_product]
@@ -165,10 +154,7 @@ if prompt:
 
             st.pyplot(fig)
 
-        # -----------------------------
-        # RETURNS
-        # -----------------------------
-
+        # RETURNS ANALYSIS
         elif "return" in q:
 
             result = returns.groupby("Product")["Returns"].sum()
@@ -185,10 +171,7 @@ if prompt:
 
             st.pyplot(fig)
 
-        # -----------------------------
         # PRODUCT SHARE
-        # -----------------------------
-
         elif "share" in q:
 
             result = share.groupby("Product")["SalesSharePercent"].mean()
@@ -205,10 +188,7 @@ if prompt:
 
             st.pyplot(fig)
 
-        # -----------------------------
-        # TRAFFIC
-        # -----------------------------
-
+        # TRAFFIC TREND
         elif "traffic" in q or "visit" in q:
 
             trend = website.groupby("Date")["Visits"].sum()
@@ -225,10 +205,7 @@ if prompt:
 
             st.pyplot(fig)
 
-        # -----------------------------
         # SALES TREND
-        # -----------------------------
-
         elif "trend" in q:
 
             trend = sales.groupby("Date")["Sales"].sum()
@@ -249,23 +226,17 @@ if prompt:
 
             st.warning(response_text)
 
-    # Save AI response
     st.session_state.messages.append({"role": "assistant", "content": response_text})
 
-# -----------------------------
-# AI EXECUTIVE REPORT
-# -----------------------------
+    # -----------------------------
+    # AI EXECUTIVE REPORT
+    # -----------------------------
 
-st.subheader("AI Executive Report")
-
-try:
+    st.subheader("AI Executive Report")
 
     sales_summary = sales.groupby("Product")["Sales"].sum()
-
     top_product = sales_summary.idxmax()
     top_sales = sales_summary.max()
-
-    low_product = sales_summary.idxmin()
 
     return_summary = returns.groupby("Product")["Returns"].sum()
     high_returns = return_summary.idxmax()
@@ -273,10 +244,7 @@ try:
     first_visit = website["Visits"].iloc[0]
     last_visit = website["Visits"].iloc[-1]
 
-    if last_visit > first_visit:
-        traffic_trend = "increasing"
-    else:
-        traffic_trend = "declining"
+    traffic_trend = "increasing" if last_visit > first_visit else "declining"
 
     st.success(
         f"Top Revenue Driver: **{top_product}** generates the highest sales ({top_sales})."
@@ -298,5 +266,10 @@ try:
 
     st.write("• Monitor website engagement to optimize marketing performance.")
 
-except:
-    st.warning("AI executive insights unavailable.")
+# -----------------------------
+# FOOTER
+# -----------------------------
+
+st.write("---")
+
+st.caption("Enterprise AI Analytics Platform | Powered by Rishikriti Technologies")
