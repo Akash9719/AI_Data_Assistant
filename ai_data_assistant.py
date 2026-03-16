@@ -147,31 +147,43 @@ st.pyplot(fig)
 
 st.subheader("AI Data Copilot")
 
-question = st.text_input(
-    "Ask business questions about your data",
-    placeholder="Example: average sales of board games in 2018"
-)
+# Create chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-col1, col2 = st.columns([2,1])
+# Display previous chat messages
+for msg in st.session_state.messages:
 
-executive_product = None
-executive_returns = None
+    if msg["role"] == "user":
+        st.chat_message("user").write(msg["content"])
 
-with col1:
+    else:
+        st.chat_message("assistant").write(msg["content"])
 
-    if question:
 
-        q = question.lower()
+# Chat input
+prompt = st.chat_input("Ask a question about your business data")
 
-        st.write("### AI Analysis")
+if prompt:
 
-        detected_product = None
+    # Save user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
-        products = sales["Product"].unique()
+    st.chat_message("user").write(prompt)
 
-        for p in products:
-            if str(p).lower() in q:
-                detected_product = p
+    q = prompt.lower()
+
+    response_text = "AI could not understand the question."
+
+    detected_product = None
+
+    products = sales["Product"].unique()
+
+    for p in products:
+        if str(p).lower() in q:
+            detected_product = p
+
+    with st.chat_message("assistant"):
 
         # -----------------------------
         # PRODUCT SALES
@@ -193,21 +205,21 @@ with col1:
             if year:
                 data = data[data["Year"] == year]
 
-            if "average" in q or "mean" in q:
+            if "average" in q:
 
                 avg = data["Sales"].mean()
 
-                st.success(
-                    f"Average sales of {detected_product} in {year}: {round(avg,2)}"
-                )
+                response_text = f"Average sales of {detected_product} in {year}: {round(avg,2)}"
+
+                st.success(response_text)
 
             else:
 
                 total = data["Sales"].sum()
 
-                st.success(
-                    f"Total sales of {detected_product}: {total}"
-                )
+                response_text = f"Total sales of {detected_product}: {total}"
+
+                st.success(response_text)
 
             fig, ax = plt.subplots()
 
@@ -218,12 +230,16 @@ with col1:
             st.pyplot(fig)
 
         # -----------------------------
-        # RETURNS ANALYSIS
+        # RETURNS
         # -----------------------------
 
         elif "return" in q:
 
             result = returns.groupby("Product")["Returns"].sum()
+
+            response_text = "Return analysis generated."
+
+            st.info(response_text)
 
             fig, ax = plt.subplots()
 
@@ -233,8 +249,6 @@ with col1:
 
             st.pyplot(fig)
 
-            executive_returns = result.idxmax()
-
         # -----------------------------
         # PRODUCT SHARE
         # -----------------------------
@@ -243,21 +257,29 @@ with col1:
 
             result = share.groupby("Product")["SalesSharePercent"].mean()
 
+            response_text = "Product share analysis generated."
+
+            st.info(response_text)
+
             fig, ax = plt.subplots()
 
             result.plot(kind="pie", autopct="%1.1f%%", ax=ax)
 
-            ax.set_title("Product Sales Share")
+            ax.set_title("Product Share")
 
             st.pyplot(fig)
 
         # -----------------------------
-        # WEBSITE TRAFFIC
+        # TRAFFIC
         # -----------------------------
 
         elif "traffic" in q or "visit" in q:
 
             trend = website.groupby("Date")["Visits"].sum()
+
+            response_text = "Website traffic trend generated."
+
+            st.info(response_text)
 
             fig, ax = plt.subplots()
 
@@ -271,80 +293,25 @@ with col1:
         # SALES TREND
         # -----------------------------
 
-        elif "trend" in q or "growth" in q:
+        elif "trend" in q:
 
             trend = sales.groupby("Date")["Sales"].sum()
+
+            response_text = "Sales trend generated."
+
+            st.info(response_text)
 
             fig, ax = plt.subplots()
 
             trend.plot(ax=ax)
 
-            ax.set_title("Overall Sales Trend")
+            ax.set_title("Sales Trend")
 
             st.pyplot(fig)
 
         else:
 
-            st.info("AI could not fully understand the question.")
+            st.warning(response_text)
 
-with col2:
-
-    st.write("### Example Questions")
-
-    st.markdown("""
-• average sales of board games in 2018  
-• total sales of lego  
-• show sales trend  
-• product share analysis  
-• website traffic trend
-""")
-
-# -----------------------------
-# AI EXECUTIVE REPORT (ONLY AFTER QUESTION)
-# -----------------------------
-
-if question:
-
-    st.subheader("AI Executive Report")
-
-    try:
-
-        sales_summary = sales.groupby("Product")["Sales"].sum()
-
-        top_product = sales_summary.idxmax()
-        top_sales = sales_summary.max()
-
-        return_summary = returns.groupby("Product")["Returns"].sum()
-        high_returns = return_summary.idxmax()
-
-        first_visit = website["Visits"].iloc[0]
-        last_visit = website["Visits"].iloc[-1]
-
-        if last_visit > first_visit:
-            traffic_trend = "increasing"
-        else:
-            traffic_trend = "declining"
-
-        st.success(
-            f"Top Revenue Driver: **{top_product}** generates the highest sales ({top_sales})."
-        )
-
-        st.warning(
-            f"Product Risk: **{high_returns}** has the highest return volume."
-        )
-
-        st.info(
-            f"Website traffic is **{traffic_trend}**, indicating changing customer demand."
-        )
-
-        st.write("### Strategic Recommendations")
-
-        st.write(f"• Focus marketing investment on **{top_product}** to maximize revenue.")
-
-        st.write(f"• Investigate quality issues causing high returns in **{high_returns}**.")
-
-        st.write("• Monitor website engagement to optimize marketing performance.")
-
-    except:
-
-        st.warning("AI executive insights unavailable.")
+    # Save AI response
+    st.session_state.messages.append({"role": "assistant", "content": response_text})
