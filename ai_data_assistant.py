@@ -94,7 +94,10 @@ if page == "Dashboard":
 
     col1,col2 = st.columns([2,1])
 
+    # -----------------------------
     # DASHBOARD
+    # -----------------------------
+
     with col1:
 
         st.subheader("Executive Dashboard")
@@ -107,7 +110,7 @@ if page == "Dashboard":
 
         total_revenue = sales["Sales"].sum()
         top_product = sales.groupby("Product")["Sales"].sum().idxmax()
-        return_rate = (returns["Returns"].sum()/sales["Sales"].sum())*1
+        return_rate = (returns["Returns"].sum()/sales["Sales"].sum())*100
         traffic_growth = website["Visits"].iloc[-1] - website["Visits"].iloc[0]
 
         k1.metric("Total Revenue",round(total_revenue,2))
@@ -115,43 +118,51 @@ if page == "Dashboard":
         k3.metric("Return Rate",f"{round(return_rate,2)}%")
         k4.metric("Traffic Growth",traffic_growth)
 
-    # COPILOT
+    # -----------------------------
+    # AI ASSISTANT (CHAT STYLE)
+    # -----------------------------
+
     with col2:
 
         st.subheader("AI Assistant")
 
-        question = st.text_input(
-            "Ask a business question",
-            placeholder="Example: total sales or average sales of board games"
-        )
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
+
+        # DISPLAY CHAT HISTORY
+        for chat in st.session_state.chat_history:
+            with st.chat_message(chat["role"]):
+                st.write(chat["content"])
+
+        question = st.chat_input("Ask a business question")
 
         if question:
+
+            st.session_state.chat_history.append(
+                {"role":"user","content":question}
+            )
 
             q = question.lower()
 
             detected_product = None
-
             products = sales["Product"].unique()
 
             for p in products:
                 if str(p).lower() in q:
                     detected_product = p
 
-            # TOTAL SALES
+            response = ""
+
             if "total sales" in q or "total revenue" in q:
 
                 total_sales = sales["Sales"].sum()
+                response = f"Total Sales: {round(total_sales,2)}"
 
-                st.success(f"Total Sales: {round(total_sales,2)}")
-
-            # TOTAL RETURNS
             elif "total returns" in q:
 
                 total_returns = returns["Returns"].sum()
+                response = f"Total Returns: {total_returns}"
 
-                st.success(f"Total Returns: {total_returns}")
-
-            # PRODUCT SALES
             elif detected_product and "sales" in q:
 
                 data = sales[sales["Product"]==detected_product]
@@ -159,14 +170,12 @@ if page == "Dashboard":
                 if "average" in q:
 
                     avg = data["Sales"].mean()
-
-                    st.success(f"Average sales of {detected_product}: {round(avg,2)}")
+                    response = f"Average sales of {detected_product}: {round(avg,2)}"
 
                 else:
 
                     total = data["Sales"].sum()
-
-                    st.success(f"Total sales of {detected_product}: {total}")
+                    response = f"Total sales of {detected_product}: {total}"
 
                 fig,ax = plt.subplots()
 
@@ -176,7 +185,6 @@ if page == "Dashboard":
 
                 st.pyplot(fig)
 
-            # RETURNS ANALYSIS
             elif "return" in q:
 
                 result = returns.groupby("Product")["Returns"].sum()
@@ -189,7 +197,8 @@ if page == "Dashboard":
 
                 st.pyplot(fig)
 
-            # TRAFFIC TREND
+                response = "Here is the returns analysis by product."
+
             elif "traffic" in q or "visit" in q:
 
                 trend = website.groupby("Date")["Visits"].sum()
@@ -202,9 +211,18 @@ if page == "Dashboard":
 
                 st.pyplot(fig)
 
+                response = "Here is the website traffic trend."
+
             else:
 
-                st.warning("AI could not understand the question.")
+                response = "I could not understand the question."
+
+            st.session_state.chat_history.append(
+                {"role":"assistant","content":response}
+            )
+
+            with st.chat_message("assistant"):
+                st.write(response)
 
         st.write("### Suggested Questions")
 
@@ -280,8 +298,6 @@ elif page == "Executive Insights":
     st.write(f"• Investigate return causes for **{high_returns}**")
 
     st.write("• Monitor website engagement trends")
-
-    # DOWNLOAD REPORT
 
     pdf = generate_pdf()
 
