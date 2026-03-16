@@ -126,22 +126,6 @@ except:
     st.warning("AI executive insights unavailable.")
 
 # -----------------------------
-# SALES OVERVIEW CHART
-# -----------------------------
-
-st.subheader("Sales Overview")
-
-sales_by_product = sales.groupby("Product")["Sales"].sum()
-
-fig, ax = plt.subplots()
-
-sales_by_product.plot(kind="bar", ax=ax)
-
-ax.set_title("Total Sales by Product")
-
-st.pyplot(fig)
-
-# -----------------------------
 # AI COPILOT SECTION
 # -----------------------------
 
