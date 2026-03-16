@@ -107,7 +107,7 @@ if page == "Dashboard":
 
         total_revenue = sales["Sales"].sum()
         top_product = sales.groupby("Product")["Sales"].sum().idxmax()
-        return_rate = (returns["Returns"].sum()/sales["Sales"].sum())*100
+        return_rate = (returns["Returns"].sum()/sales["Sales"].sum())*1
         traffic_growth = website["Visits"].iloc[-1] - website["Visits"].iloc[0]
 
         k1.metric("Total Revenue",round(total_revenue,2))
