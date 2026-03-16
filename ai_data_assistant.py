@@ -121,118 +121,138 @@ if page == "Dashboard":
     # -----------------------------
     # AI ASSISTANT (CHAT STYLE)
     # -----------------------------
-
+    
     with col2:
-
+    
         st.subheader("AI Assistant")
-
+    
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
-
+    
         # DISPLAY CHAT HISTORY
         for chat in st.session_state.chat_history:
+    
             with st.chat_message(chat["role"]):
+    
                 st.write(chat["content"])
-
+    
+                if "chart" in chat:
+                    st.pyplot(chat["chart"])
+    
         question = st.chat_input("Ask a business question")
-
+    
         if question:
-
+    
             st.session_state.chat_history.append(
                 {"role":"user","content":question}
             )
-
+    
             q = question.lower()
-
+    
             detected_product = None
             products = sales["Product"].unique()
-
+    
             for p in products:
                 if str(p).lower() in q:
                     detected_product = p
-
+    
             response = ""
-
+            chart = None
+    
+            # TOTAL SALES
             if "total sales" in q or "total revenue" in q:
-
+    
                 total_sales = sales["Sales"].sum()
                 response = f"Total Sales: {round(total_sales,2)}"
-
+    
+            # TOTAL RETURNS
             elif "total returns" in q:
-
+    
                 total_returns = returns["Returns"].sum()
                 response = f"Total Returns: {total_returns}"
-
+    
+            # PRODUCT SALES
             elif detected_product and "sales" in q:
-
+    
                 data = sales[sales["Product"]==detected_product]
-
+    
                 if "average" in q:
-
+    
                     avg = data["Sales"].mean()
                     response = f"Average sales of {detected_product}: {round(avg,2)}"
-
+    
                 else:
-
+    
                     total = data["Sales"].sum()
                     response = f"Total sales of {detected_product}: {total}"
-
+    
                 fig,ax = plt.subplots()
-
+    
                 data.groupby("Date")["Sales"].sum().plot(ax=ax)
-
+    
                 ax.set_title(f"Sales Trend - {detected_product}")
-
-                st.pyplot(fig)
-
+    
+                chart = fig
+    
+            # RETURNS ANALYSIS
             elif "return" in q:
-
+    
                 result = returns.groupby("Product")["Returns"].sum()
-
+    
                 fig,ax = plt.subplots()
-
+    
                 result.plot(kind="bar",ax=ax)
-
+    
                 ax.set_title("Returns by Product")
-
-                st.pyplot(fig)
-
-                response = "Here is the returns analysis by product."
-
+    
+                chart = fig
+    
+                response = "Here is the returns analysis."
+    
+            # TRAFFIC TREND
             elif "traffic" in q or "visit" in q:
-
+    
                 trend = website.groupby("Date")["Visits"].sum()
-
+    
                 fig,ax = plt.subplots()
-
+    
                 trend.plot(ax=ax)
-
+    
                 ax.set_title("Website Traffic Trend")
-
-                st.pyplot(fig)
-
+    
+                chart = fig
+    
                 response = "Here is the website traffic trend."
-
+    
             else:
-
+    
                 response = "I could not understand the question."
-
-            st.session_state.chat_history.append(
-                {"role":"assistant","content":response}
-            )
-
+    
+            assistant_message = {
+                "role":"assistant",
+                "content":response
+            }
+    
+            if chart:
+                assistant_message["chart"] = chart
+    
+            st.session_state.chat_history.append(assistant_message)
+    
             with st.chat_message("assistant"):
+    
                 st.write(response)
-
+    
+                if chart:
+                    st.pyplot(chart)
+    
         st.write("### Suggested Questions")
-
+    
         st.markdown("""
         • What is total sales  
         • What are total returns  
         • Average sales of board games  
         • Show sales trend  
         """)
-
 # -----------------------------
 # DATASET EXPLORER
 # -----------------------------
