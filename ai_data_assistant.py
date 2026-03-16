@@ -154,6 +154,9 @@ question = st.text_input(
 
 col1, col2 = st.columns([2,1])
 
+executive_product = None
+executive_returns = None
+
 with col1:
 
     if question:
@@ -230,6 +233,8 @@ with col1:
 
             st.pyplot(fig)
 
+            executive_returns = result.idxmax()
+
         # -----------------------------
         # PRODUCT SHARE
         # -----------------------------
@@ -295,9 +300,51 @@ with col2:
 """)
 
 # -----------------------------
-# FOOTER
+# AI EXECUTIVE REPORT (ONLY AFTER QUESTION)
 # -----------------------------
 
-st.write("---")
+if question:
 
-st.caption("Enterprise AI Analytics Platform | Powered by Rishikriti Technologies")
+    st.subheader("AI Executive Report")
+
+    try:
+
+        sales_summary = sales.groupby("Product")["Sales"].sum()
+
+        top_product = sales_summary.idxmax()
+        top_sales = sales_summary.max()
+
+        return_summary = returns.groupby("Product")["Returns"].sum()
+        high_returns = return_summary.idxmax()
+
+        first_visit = website["Visits"].iloc[0]
+        last_visit = website["Visits"].iloc[-1]
+
+        if last_visit > first_visit:
+            traffic_trend = "increasing"
+        else:
+            traffic_trend = "declining"
+
+        st.success(
+            f"Top Revenue Driver: **{top_product}** generates the highest sales ({top_sales})."
+        )
+
+        st.warning(
+            f"Product Risk: **{high_returns}** has the highest return volume."
+        )
+
+        st.info(
+            f"Website traffic is **{traffic_trend}**, indicating changing customer demand."
+        )
+
+        st.write("### Strategic Recommendations")
+
+        st.write(f"• Focus marketing investment on **{top_product}** to maximize revenue.")
+
+        st.write(f"• Investigate quality issues causing high returns in **{high_returns}**.")
+
+        st.write("• Monitor website engagement to optimize marketing performance.")
+
+    except:
+
+        st.warning("AI executive insights unavailable.")
