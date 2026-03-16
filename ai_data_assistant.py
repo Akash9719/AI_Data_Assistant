@@ -60,6 +60,60 @@ if "Returns" in returns.columns:
 st.dataframe(preview.head())
 
 # -----------------------------
+# AI EXECUTIVE REPORT
+# -----------------------------
+
+st.subheader("AI Executive Report")
+
+try:
+
+    # Total revenue by product
+    sales_summary = sales.groupby("Product")["Sales"].sum()
+
+    top_product = sales_summary.idxmax()
+    top_sales = sales_summary.max()
+
+    # Lowest performing product
+    low_product = sales_summary.idxmin()
+
+    # Returns analysis
+    if "Returns" in returns.columns:
+        return_summary = returns.groupby("Product")["Returns"].sum()
+        high_returns = return_summary.idxmax()
+    else:
+        high_returns = "Unknown"
+
+    # Website traffic trend
+    if "Visits" in website.columns:
+        first_visit = website["Visits"].iloc[0]
+        last_visit = website["Visits"].iloc[-1]
+
+        if last_visit > first_visit:
+            traffic_trend = "increasing"
+        else:
+            traffic_trend = "declining"
+    else:
+        traffic_trend = "unknown"
+
+    # Executive insights
+    st.success(f"Top Revenue Driver: **{top_product}** generates the highest sales ({top_sales}).")
+
+    st.warning(f"Product Risk: **{high_returns}** has the highest return volume.")
+
+    st.info(f"Website traffic is **{traffic_trend}**, indicating changing customer demand.")
+
+    st.write("### Strategic Recommendations")
+
+    st.write(f"• Focus marketing investment on **{top_product}** to maximize revenue growth.")
+
+    st.write(f"• Investigate quality or logistics issues causing high returns in **{high_returns}**.")
+
+    st.write("• Monitor website engagement trends to optimize digital marketing performance.")
+
+except:
+
+    st.error("AI Executive Report could not be generated.")
+# -----------------------------
 # AUTO AI INSIGHTS
 # -----------------------------
 
