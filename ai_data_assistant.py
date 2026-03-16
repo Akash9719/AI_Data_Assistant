@@ -51,7 +51,8 @@ traffic_growth = website["Visits"].iloc[-1] - website["Visits"].iloc[0]
 
 col1.metric("Total Revenue", total_revenue)
 col2.metric("Top Product", top_product)
-col3.metric("Total Returns", total_returns)
+return_rate = (returns["Returns"].sum() / sales["Sales"].sum()) * 100
+col3.metric("Return Rate", f"{round(return_rate,2)}%")
 col4.metric("Traffic Growth", traffic_growth)
 
 # -----------------------------
@@ -113,6 +114,31 @@ if prompt:
 
     with st.sidebar.chat_message("assistant"):
 
+    # -----------------------------
+    # TOTAL SALES
+    # -----------------------------
+    
+    if "total sales" in q or "total revenue" in q:
+    
+        total_sales = sales["Sales"].sum()
+    
+        response_text = f"Total sales across all products: {total_sales}"
+    
+        st.success(response_text)
+    
+    # -----------------------------
+    # TOTAL RETURNS
+    # -----------------------------
+    
+    elif "total returns" in q:
+    
+        total_returns = returns["Returns"].sum()
+    
+        response_text = f"Total returns across all products: {total_returns}"
+    
+        st.success(response_text)
+
+        
         # PRODUCT SALES
         if detected_product and "sales" in q:
 
