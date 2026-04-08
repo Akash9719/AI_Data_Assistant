@@ -17,25 +17,28 @@ st.title("Enterprise AI Analytics Platform")
 sales = pd.read_csv("sales_data.csv")
 returns = pd.read_csv("returns_data.csv")
 
-# DATE PREP
+# -----------------------------
+# ENTERPRISE DATA MODEL
+# -----------------------------
 sales["Date"] = pd.to_datetime(sales["Date"])
 sales["Year"] = sales["Date"].dt.year
 sales["Month"] = sales["Date"].dt.month
 
-# -----------------------------
-# 🔥 FIX: PRE-AGGREGATE RETURNS (NO DUPLICATION)
-# -----------------------------
-# Normalize returns to avoid inflation
-returns_grouped = returns.copy()
+# 🔥 Convert aggregated returns → time-aware
+returns_expanded = sales[["Product","Date","Year","Month"]].merge(
+    returns, on="Product", how="left"
+)
 
-# If returns already aggregated → scale it down
-returns_grouped["Returns"] = returns_grouped["Returns"] / len(sales["Date"].unique())
+# Normalize per product (VERY IMPORTANT)
+returns_expanded["Returns"] = returns_expanded["Returns"] / \
+    returns_expanded.groupby("Product")["Date"].transform("count")
 
-if "Cancellations" in returns_grouped.columns:
-    returns_grouped["Cancellations"] = returns_grouped["Cancellations"] / len(sales["Date"].unique())
+if "Cancellations" in returns_expanded.columns:
+    returns_expanded["Cancellations"] = returns_expanded["Cancellations"] / \
+        returns_expanded.groupby("Product")["Date"].transform("count")
 
 # -----------------------------
-# HELPER FUNCTIONS
+# ENTITY EXTRACTION
 # -----------------------------
 def extract_entities(question):
 
@@ -43,6 +46,17 @@ def extract_entities(question):
 
     year_match = re.search(r"\b(20\d{2})\b", q)
     year = int(year_match.group()) if year_match else None
+
+    month = None
+    months = {
+        "january":1,"february":2,"march":3,"april":4,
+        "may":5,"june":6,"july":7,"august":8,
+        "september":9,"october":10,"november":11,"december":12
+    }
+
+    for m in months:
+        if m in q:
+            month = months[m]
 
     product = None
     for p in sales["Product"].unique():
@@ -63,44 +77,39 @@ def extract_entities(question):
     else:
         metric = None
 
-    return q, year, product, top_n, metric
+    return q, year, month, product, top_n, metric
 
-
-def apply_filters(df, product, year):
-
-    data = df.copy()
-
-    if product:
-        data = data[data["Product"] == product]
-
-    if year and "Year" in df.columns:
-        data = data[data["Year"] == year]
-
-    return data
-
-
+# -----------------------------
+# KPI CALCULATION (DAX-LIKE)
+# -----------------------------
 def calculate_kpis(product=None, year=None):
 
-    s = apply_filters(sales, product, year)
-    r = apply_filters(returns_grouped, product, None)
+    s = sales.copy()
+    r = returns_expanded.copy()
+
+    if product:
+        s = s[s["Product"] == product]
+        r = r[r["Product"] == product]
+
+    if year:
+        s = s[s["Year"] == year]
+        r = r[r["Year"] == year]
 
     total_sales = s["Sales"].sum()
-
-    # 🔥 Scale returns proportionally
-    factor = len(s) / len(sales) if len(sales) > 0 else 1
-
-    total_returns = r["Returns"].sum() * factor
+    total_returns = r["Returns"].sum()
 
     total_cancel = 0
     if "Cancellations" in r.columns:
-        total_cancel = r["Cancellations"].sum() * factor
+        total_cancel = r["Cancellations"].sum()
 
     return_rate = (total_returns / total_sales * 100) if total_sales else 0
     cancel_rate = (total_cancel / total_sales * 100) if total_sales else 0
 
     return total_sales, total_returns, total_cancel, return_rate, cancel_rate
 
-
+# -----------------------------
+# PDF GENERATOR
+# -----------------------------
 def generate_pdf():
 
     buffer = BytesIO()
@@ -115,6 +124,7 @@ def generate_pdf():
 
     c.save()
     buffer.seek(0)
+
     return buffer
 
 # -----------------------------
@@ -163,28 +173,41 @@ if page == "Dashboard":
 
             st.session_state.chat_history.append({"role":"user","content":question})
 
-            q, year, product, top_n, metric = extract_entities(question)
+            q, year, month, product, top_n, metric = extract_entities(question)
 
             response = {"role":"assistant"}
 
             if metric == "sales":
 
-                data = apply_filters(sales, product, year)
+                data = sales.copy()
 
-                if top_n:
-                    result = data.groupby("Product")["Sales"].sum().sort_values(ascending=False).head(top_n)
-                    response["content"] = result.to_string()
-                else:
-                    response["content"] = f"Total Sales: {round(data['Sales'].sum(),2)}"
+                if product:
+                    data = data[data["Product"] == product]
+                if year:
+                    data = data[data["Year"] == year]
+
+                response["content"] = f"Total Sales: {round(data['Sales'].sum(),2)}"
 
             elif metric == "returns":
 
-                data = apply_filters(returns_grouped, product, None)
+                data = returns_expanded.copy()
+
+                if product:
+                    data = data[data["Product"] == product]
+                if year:
+                    data = data[data["Year"] == year]
+
                 response["content"] = f"Total Returns: {int(data['Returns'].sum())}"
 
             elif metric == "cancellations":
 
-                data = apply_filters(returns_grouped, product, None)
+                data = returns_expanded.copy()
+
+                if product:
+                    data = data[data["Product"] == product]
+                if year:
+                    data = data[data["Year"] == year]
+
                 response["content"] = f"Total Cancellations: {int(data['Cancellations'].sum())}"
 
             elif metric == "rate":
