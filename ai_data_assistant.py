@@ -8,43 +8,49 @@ import re
 # CONFIG
 # -----------------------------
 st.set_page_config(page_title="AI Copilot Analytics", layout="wide")
-st.title("🤖 AI Analytics Copilot")
+st.title("🤖 AI Copilot (Power BI Style)")
 
 # -----------------------------
-# LOAD DATA
+# LOAD DATA (MATCH PBI)
 # -----------------------------
 sales = pd.read_csv("sales_data.csv")
 returns = pd.read_csv("returns_data.csv")
+share = pd.read_csv("product_share.csv")
 website = pd.read_csv("website_data.csv")
 
-# DATE FEATURES
+# -----------------------------
+# DATA PREP (CRITICAL)
+# -----------------------------
 sales["Date"] = pd.to_datetime(sales["Date"])
 sales["Year"] = sales["Date"].dt.year
 sales["Month"] = sales["Date"].dt.month
 
-returns["Date"] = pd.to_datetime(returns["Date"])
-returns["Year"] = returns["Date"].dt.year
-returns["Month"] = returns["Date"].dt.month
+# Merge category into sales
+sales = sales.merge(share, on="Product", how="left")
+
+# Merge returns into sales
+returns = returns.merge(share, on="Product", how="left")
 
 # -----------------------------
-# NORMALIZATION + MATCHING
+# NORMALIZATION
 # -----------------------------
 def normalize(text):
     return str(text).lower().strip()
 
-def smart_match(user_text, values):
-    user_text = normalize(user_text)
-    values_clean = [normalize(v) for v in values]
+def smart_match(q, values):
+    q = normalize(q)
+    values = list(values)
 
     for v in values:
-        if normalize(v) in user_text:
+        if normalize(v) in q:
             return v
 
-    match = get_close_matches(user_text, values_clean, n=1, cutoff=0.6)
-    if match:
+    matches = get_close_matches(q, [normalize(v) for v in values], n=1, cutoff=0.6)
+    if matches:
         for v in values:
-            if normalize(v) == match[0]:
+            if normalize(v) == matches[0]:
                 return v
+
     return None
 
 def detect_metric(q):
@@ -63,8 +69,12 @@ def extract_entities(question):
 
     q = normalize(question)
 
+    year = None
+    month = None
+
     year_match = re.search(r"\b(20\d{2})\b", q)
-    year = int(year_match.group()) if year_match else None
+    if year_match:
+        year = int(year_match.group())
 
     months = {
         "january":1,"february":2,"march":3,"april":4,
@@ -72,36 +82,31 @@ def extract_entities(question):
         "september":9,"october":10,"november":11,"december":12
     }
 
-    month = None
     for m in months:
         if m in q:
             month = months[m]
 
     product = smart_match(q, sales["Product"].unique())
-    region = smart_match(q, sales["Region"].dropna().unique()) if "Region" in sales.columns else None
-    category = smart_match(q, sales["Category"].dropna().unique()) if "Category" in sales.columns else None
+    category = smart_match(q, sales["Category"].dropna().unique())
 
     top_match = re.search(r"top (\d+)", q)
     top_n = int(top_match.group(1)) if top_match else None
 
     metric = detect_metric(q)
 
-    return q, year, month, product, region, category, top_n, metric
+    return q, year, month, product, category, top_n, metric
 
 # -----------------------------
 # FILTER ENGINE
 # -----------------------------
-def apply_filters(df, product, region, category, year, month):
+def apply_filters(df, product, category, year, month):
 
     data = df.copy()
 
-    if product and "Product" in df.columns:
+    if product:
         data = data[data["Product"] == product]
 
-    if region and "Region" in df.columns:
-        data = data[data["Region"] == region]
-
-    if category and "Category" in df.columns:
+    if category:
         data = data[data["Category"] == category]
 
     if year and "Year" in df.columns:
@@ -113,44 +118,18 @@ def apply_filters(df, product, region, category, year, month):
     return data
 
 # -----------------------------
-# AUTO INSIGHTS
+# KPI PANEL (LIKE PBI)
 # -----------------------------
-def generate_insights(data):
-
-    insights = []
-
-    if "Sales" in data.columns and len(data) > 1:
-
-        trend = data.groupby("Date")["Sales"].sum()
-
-        if len(trend) > 1:
-            if trend.iloc[-1] > trend.iloc[0]:
-                insights.append("📈 Sales are increasing")
-            else:
-                insights.append("📉 Sales are declining")
-
-    if "Product" in data.columns:
-        try:
-            top = data.groupby("Product")["Sales"].sum().idxmax()
-            insights.append(f"🏆 Top product: {top}")
-        except:
-            pass
-
-    return insights
-
-# -----------------------------
-# KPI PANEL
-# -----------------------------
-st.subheader("📊 Live KPIs")
+st.subheader("📊 Executive KPIs")
 
 k1,k2,k3 = st.columns(3)
 
 k1.metric("Total Sales", round(sales["Sales"].sum(),2))
 k2.metric("Total Returns", returns["Returns"].sum())
-k3.metric("Website Visits", website["Visits"].sum())
+k3.metric("Top Product", sales.groupby("Product")["Sales"].sum().idxmax())
 
 # -----------------------------
-# CHAT UI
+# CHAT
 # -----------------------------
 st.subheader("💬 AI Copilot")
 
@@ -161,13 +140,13 @@ for chat in st.session_state.chat_history:
     with st.chat_message(chat["role"]):
         st.write(chat["content"])
 
-question = st.chat_input("Ask anything about your data...")
+question = st.chat_input("Ask your business question...")
 
 if question:
 
     st.session_state.chat_history.append({"role":"user","content":question})
 
-    q, year, month, product, region, category, top_n, metric = extract_entities(question)
+    q, year, month, product, category, top_n, metric = extract_entities(question)
 
     response = {"role":"assistant"}
 
@@ -176,52 +155,55 @@ if question:
     # -----------------------------
     if metric == "sales":
 
-        data = apply_filters(sales, product, region, category, year, month)
+        data = apply_filters(sales, product, category, year, month)
 
-        if "vs" in q and year:
-            prev_year = year - 1
-
-            curr = sales[sales["Year"] == year]["Sales"].sum()
-            prev = sales[sales["Year"] == prev_year]["Sales"].sum()
-
-            growth = ((curr - prev)/prev*100) if prev != 0 else 0
-
-            response["content"] = f"""
-📊 Sales {year}: {round(curr,2)}
-📊 Sales {prev_year}: {round(prev,2)}
-📈 Growth: {round(growth,2)}%
-"""
-
-        elif top_n:
+        if top_n:
             result = data.groupby("Product")["Sales"].sum().sort_values(ascending=False).head(top_n)
             response["content"] = f"🏆 Top {top_n} Products:\n{result.to_string()}"
+
+        elif "vs" in q and year:
+            prev = year - 1
+            curr_val = sales[sales["Year"] == year]["Sales"].sum()
+            prev_val = sales[sales["Year"] == prev]["Sales"].sum()
+
+            growth = ((curr_val-prev_val)/prev_val*100) if prev_val != 0 else 0
+
+            response["content"] = f"""
+Sales {year}: {round(curr_val,2)}
+Sales {prev}: {round(prev_val,2)}
+Growth: {round(growth,2)}%
+"""
 
         else:
             total = data["Sales"].sum()
 
-            msg = "💰 Total sales"
+            msg = "💰 Total Sales"
 
             if product: msg += f" for {product}"
             if category: msg += f" ({category})"
-            if region: msg += f" in {region}"
             if year: msg += f" {year}"
 
             msg += f": {round(total,2)}"
 
             if total == 0:
-                msg += "\n⚠️ No data found"
+                msg += "\n⚠️ No matching data found"
 
             response["content"] = msg
+
+        # Chart
+        fig, ax = plt.subplots()
+        data.groupby("Date")["Sales"].sum().plot(ax=ax)
+        st.pyplot(fig)
 
     # -----------------------------
     # RETURNS
     # -----------------------------
     elif metric == "returns":
 
-        data = apply_filters(returns, product, region, category, year, month)
+        data = apply_filters(returns, product, category, year, month)
 
         total = data["Returns"].sum()
-        response["content"] = f"🔁 Total returns: {total}"
+        response["content"] = f"🔁 Total Returns: {total}"
 
     # -----------------------------
     # TRAFFIC
@@ -237,31 +219,7 @@ if question:
         response["content"] = "🌐 Website traffic trend displayed"
 
     else:
-        response["content"] = "Try asking about sales, returns, or traffic."
+        response["content"] = "Try asking about sales, returns, or top products."
 
     st.session_state.chat_history.append(response)
-
-    # -----------------------------
-    # DISPLAY RESPONSE (POLISHED)
-    # -----------------------------
-    with st.chat_message("assistant"):
-
-        st.markdown("### 💡 Answer")
-        st.write(response["content"])
-
-        # AUTO INSIGHTS
-        if metric == "sales":
-            insights = generate_insights(data)
-
-            if insights:
-                st.markdown("### 📊 Insights")
-                for i in insights:
-                    st.write(f"- {i}")
-
-        # CHART
-        if metric == "sales":
-            fig, ax = plt.subplots()
-            data.groupby("Date")["Sales"].sum().plot(ax=ax)
-            st.pyplot(fig)
-
     st.rerun()
