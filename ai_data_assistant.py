@@ -14,58 +14,55 @@ st.title("🤖 AI Copilot Dashboard")
 # -----------------------------
 sales = pd.read_csv("sales_data.csv")
 returns = pd.read_csv("returns_data.csv")
+website = pd.read_csv("website_data.csv")
 
-# DATE FIX
+# -----------------------------
+# DATE PREP
+# -----------------------------
 sales["Date"] = pd.to_datetime(sales["Date"])
 sales["Year"] = sales["Date"].dt.year
 sales["Month"] = sales["Date"].dt.month
 
-if "Date" in returns.columns:
-    returns["Date"] = pd.to_datetime(returns["Date"])
-    returns["Year"] = returns["Date"].dt.year
-    returns["Month"] = returns["Date"].dt.month
-else:
-    returns["Year"] = sales["Year"].max()
-    returns["Month"] = 1
+# 🔥 Make RETURNS time-aware (IMPORTANT FIX)
+returns_merged = sales[["Product","Date","Year","Month"]].merge(
+    returns, on="Product", how="left"
+)
 
 # -----------------------------
-# ENTITY EXTRACTION (FIXED)
+# ENTITY EXTRACTION
 # -----------------------------
 def extract_entities(question):
 
     q = question.lower()
 
+    # YEAR
     year_match = re.search(r"\b(20\d{2})\b", q)
     year = int(year_match.group()) if year_match else None
 
-    # PRODUCT MATCH
+    # PRODUCT MATCH (robust)
     product = None
     for p in sales["Product"].unique():
         if str(p).lower() in q:
             product = p
 
-    # CATEGORY SAFE
-    category = None
-    if "Category" in sales.columns:
-        for c in sales["Category"].dropna().unique():
-            if str(c).lower() in q:
-                category = c
-
     # TOP N
     top_match = re.search(r"top (\d+)", q)
     top_n = int(top_match.group(1)) if top_match else None
 
-    # METRIC
-    metric = None
-    if "sales" in q or "revenue" in q:
+    # METRIC DETECTION
+    if any(x in q for x in ["sales","revenue","income"]):
         metric = "sales"
-    elif "return" in q:
+    elif any(x in q for x in ["return","returns","refund"]):
         metric = "returns"
+    elif any(x in q for x in ["top","best"]):
+        metric = "top"
+    else:
+        metric = None
 
-    return q, year, product, category, top_n, metric
+    return q, year, product, top_n, metric
 
 # -----------------------------
-# FILTER ENGINE
+# FILTER FUNCTION
 # -----------------------------
 def apply_filters(df, product, year):
 
@@ -80,21 +77,39 @@ def apply_filters(df, product, year):
     return data
 
 # -----------------------------
-# LAYOUT (DASHBOARD + CHAT)
+# INSIGHTS ENGINE (LIKE PBI)
+# -----------------------------
+def generate_insights():
+
+    yearly = sales.groupby("Year")["Sales"].sum()
+
+    if len(yearly) > 1:
+        growth = ((yearly.iloc[-1] - yearly.iloc[0]) / yearly.iloc[0]) * 100
+    else:
+        growth = 0
+
+    insight = f"📊 Revenue changed by {round(growth,2)}% over the period."
+
+    return insight
+
+# -----------------------------
+# LAYOUT
 # -----------------------------
 col1, col2 = st.columns([2,1])
 
 # -----------------------------
-# LEFT SIDE (DASHBOARD IMAGE)
+# LEFT: DASHBOARD IMAGE + INSIGHTS
 # -----------------------------
 with col1:
 
     st.subheader("📊 Executive Dashboard")
-
     st.image("powerbi_dashboard.png", use_container_width=True)
 
+    st.subheader("📊 AI Insights")
+    st.info(generate_insights())
+
 # -----------------------------
-# RIGHT SIDE (AI CHAT)
+# RIGHT: CHAT
 # -----------------------------
 with col2:
 
@@ -103,30 +118,28 @@ with col2:
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    # SHOW CHAT
     for chat in st.session_state.chat_history:
         with st.chat_message(chat["role"]):
             st.write(chat["content"])
 
-    # INPUT
     question = st.chat_input("Ask a business question...")
 
     if question:
 
         st.session_state.chat_history.append(
-            {"role": "user", "content": question}
+            {"role":"user","content":question}
         )
 
         try:
-            q, year, product, category, top_n, metric = extract_entities(question)
+            q, year, product, top_n, metric = extract_entities(question)
         except Exception as e:
             st.error(f"Error: {e}")
             st.stop()
 
-        response = {"role": "assistant"}
+        response = {"role":"assistant"}
 
         # -----------------------------
-        # SALES LOGIC
+        # SALES
         # -----------------------------
         if metric == "sales":
 
@@ -141,7 +154,7 @@ with col2:
                 curr_val = sales[sales["Year"] == year]["Sales"].sum()
                 prev_val = sales[sales["Year"] == prev]["Sales"].sum()
 
-                growth = ((curr_val - prev_val) / prev_val * 100) if prev_val != 0 else 0
+                growth = ((curr_val - prev_val)/prev_val*100) if prev_val != 0 else 0
 
                 response["content"] = f"""
 Sales {year}: {round(curr_val,2)}
@@ -167,11 +180,11 @@ Growth: {round(growth,2)}%
                 response["content"] = msg
 
         # -----------------------------
-        # RETURNS
+        # RETURNS (FIXED)
         # -----------------------------
         elif metric == "returns":
 
-            data = apply_filters(returns, product, year)
+            data = apply_filters(returns_merged, product, year)
 
             total = data["Returns"].sum()
 
@@ -179,13 +192,30 @@ Growth: {round(growth,2)}%
 
             if product:
                 msg += f" for {product}"
+            if year:
+                msg += f" in {year}"
 
-            msg += f": {total}"
+            msg += f": {int(total)}"
+
+            if total == 0:
+                msg += "\n⚠️ No data found"
 
             response["content"] = msg
 
+        # -----------------------------
+        # TOP PRODUCTS
+        # -----------------------------
+        elif metric == "top":
+
+            result = sales.groupby("Product")["Sales"].sum().sort_values(ascending=False)
+
+            response["content"] = f"""
+🏆 Top Products:
+{result.head(5).to_string()}
+"""
+
         else:
-            response["content"] = "Try asking about sales or returns."
+            response["content"] = "Try asking about sales, returns, or top products."
 
         st.session_state.chat_history.append(response)
         st.rerun()
