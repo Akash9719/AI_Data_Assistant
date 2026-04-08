@@ -25,7 +25,14 @@ sales["Month"] = sales["Date"].dt.month
 # -----------------------------
 # 🔥 FIX: PRE-AGGREGATE RETURNS (NO DUPLICATION)
 # -----------------------------
-returns_grouped = returns.groupby("Product").sum(numeric_only=True).reset_index()
+# Normalize returns to avoid inflation
+returns_grouped = returns.copy()
+
+# If returns already aggregated → scale it down
+returns_grouped["Returns"] = returns_grouped["Returns"] / len(sales["Date"].unique())
+
+if "Cancellations" in returns_grouped.columns:
+    returns_grouped["Cancellations"] = returns_grouped["Cancellations"] / len(sales["Date"].unique())
 
 # -----------------------------
 # HELPER FUNCTIONS
@@ -78,8 +85,15 @@ def calculate_kpis(product=None, year=None):
     r = apply_filters(returns_grouped, product, None)
 
     total_sales = s["Sales"].sum()
-    total_returns = r["Returns"].sum()
-    total_cancel = r["Cancellations"].sum() if "Cancellations" in r.columns else 0
+
+    # 🔥 Scale returns proportionally
+    factor = len(s) / len(sales) if len(sales) > 0 else 1
+
+    total_returns = r["Returns"].sum() * factor
+
+    total_cancel = 0
+    if "Cancellations" in r.columns:
+        total_cancel = r["Cancellations"].sum() * factor
 
     return_rate = (total_returns / total_sales * 100) if total_sales else 0
     cancel_rate = (total_cancel / total_sales * 100) if total_sales else 0
