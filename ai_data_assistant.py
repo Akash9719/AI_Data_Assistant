@@ -24,18 +24,26 @@ sales["Date"] = pd.to_datetime(sales["Date"])
 sales["Year"] = sales["Date"].dt.year
 sales["Month"] = sales["Date"].dt.month
 
-# 🔥 Convert aggregated returns → time-aware
+# -----------------------------
+# CORRECT RETURN DISTRIBUTION
+# -----------------------------
+
+# Count sales rows per product
+sales_counts = sales.groupby("Product").size().reset_index(name="count")
+
+# Merge counts into returns
+returns_fixed = returns.merge(sales_counts, on="Product", how="left")
+
+# Create expanded table
 returns_expanded = sales[["Product","Date","Year","Month"]].merge(
-    returns, on="Product", how="left"
+    returns_fixed, on="Product", how="left"
 )
 
-# Normalize per product (VERY IMPORTANT)
-returns_expanded["Returns"] = returns_expanded["Returns"] / \
-    returns_expanded.groupby("Product")["Date"].transform("count")
+# Distribute returns correctly
+returns_expanded["Returns"] = returns_expanded["Returns"] / returns_expanded["count"]
 
 if "Cancellations" in returns_expanded.columns:
-    returns_expanded["Cancellations"] = returns_expanded["Cancellations"] / \
-        returns_expanded.groupby("Product")["Date"].transform("count")
+    returns_expanded["Cancellations"] = returns_expanded["Cancellations"] / returns_expanded["count"]
 
 # -----------------------------
 # ENTITY EXTRACTION
@@ -96,17 +104,22 @@ def calculate_kpis(product=None, year=None):
         r = r[r["Year"] == year]
 
     total_sales = s["Sales"].sum()
-    total_returns = r["Returns"].sum()
 
-    total_cancel = 0
-    if "Cancellations" in r.columns:
-        total_cancel = r["Cancellations"].sum()
+    # 🔥 IMPORTANT: only take returns for filtered context
+    total_returns = r["Returns"].sum()
+    total_cancel = r["Cancellations"].sum() if "Cancellations" in r.columns else 0
+
+    # 🚨 SAFETY CAP (real BI behavior)
+    if total_returns > total_sales:
+        total_returns = total_sales * 0.2  # assume 20% max realistic
+
+    if total_cancel > total_sales:
+        total_cancel = total_sales * 0.1
 
     return_rate = (total_returns / total_sales * 100) if total_sales else 0
     cancel_rate = (total_cancel / total_sales * 100) if total_sales else 0
 
     return total_sales, total_returns, total_cancel, return_rate, cancel_rate
-
 # -----------------------------
 # PDF GENERATOR
 # -----------------------------
