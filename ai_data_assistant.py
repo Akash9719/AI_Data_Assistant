@@ -1,13 +1,16 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from io import BytesIO
 import re
 
 # -----------------------------
 # CONFIG
 # -----------------------------
-st.set_page_config(page_title="AI Copilot Dashboard", layout="wide")
-st.title("🤖 AI Copilot Dashboard")
+st.set_page_config(page_title="Enterprise AI Analytics Platform", layout="wide")
+st.title("Enterprise AI Analytics Platform")
 
 # -----------------------------
 # LOAD DATA
@@ -16,206 +19,235 @@ sales = pd.read_csv("sales_data.csv")
 returns = pd.read_csv("returns_data.csv")
 website = pd.read_csv("website_data.csv")
 
-# -----------------------------
-# DATE PREP
-# -----------------------------
 sales["Date"] = pd.to_datetime(sales["Date"])
 sales["Year"] = sales["Date"].dt.year
 sales["Month"] = sales["Date"].dt.month
-
-# 🔥 Make RETURNS time-aware (IMPORTANT FIX)
-returns_merged = sales[["Product","Date","Year","Month"]].merge(
-    returns, on="Product", how="left"
-)
+sales["Month_Name"] = sales["Date"].dt.strftime("%B")
 
 # -----------------------------
-# ENTITY EXTRACTION
+# HELPER FUNCTIONS
 # -----------------------------
+
 def extract_entities(question):
-
     q = question.lower()
 
     # YEAR
     year_match = re.search(r"\b(20\d{2})\b", q)
     year = int(year_match.group()) if year_match else None
 
-    # PRODUCT MATCH (robust)
+    # MONTH
+    months = {
+        "january":1,"february":2,"march":3,"april":4,
+        "may":5,"june":6,"july":7,"august":8,
+        "september":9,"october":10,"november":11,"december":12
+    }
+
+    month = None
+    for m in months:
+        if m in q:
+            month = months[m]
+
+    # PRODUCT
     product = None
     for p in sales["Product"].unique():
         if str(p).lower() in q:
             product = p
 
+    # REGION
+    region = None
+    if "Region" in sales.columns:
+        for r in sales["Region"].dropna().unique():
+            if str(r).lower() in q:
+                region = r
+
+    # CATEGORY
+    category = None
+    if "Category" in sales.columns:
+        for c in sales["Category"].dropna().unique():
+            if str(c).lower() in q:
+                category = c
+
     # TOP N
     top_match = re.search(r"top (\d+)", q)
     top_n = int(top_match.group(1)) if top_match else None
 
-    # METRIC DETECTION
-    if any(x in q for x in ["sales","revenue","income"]):
-        metric = "sales"
-    elif any(x in q for x in ["return","returns","refund"]):
-        metric = "returns"
-    elif any(x in q for x in ["top","best"]):
-        metric = "top"
-    else:
-        metric = None
+    return q, year, month, product, region, category, top_n
 
-    return q, year, product, top_n, metric
 
-# -----------------------------
-# FILTER FUNCTION
-# -----------------------------
-def apply_filters(df, product, year):
-
+def apply_filters(df, product, region, category, year, month):
     data = df.copy()
 
     if product:
         data = data[data["Product"] == product]
 
+    if region and "Region" in df.columns:
+        data = data[data["Region"] == region]
+
+    if category and "Category" in df.columns:
+        data = data[data["Category"] == category]
+
     if year and "Year" in df.columns:
         data = data[data["Year"] == year]
 
+    if month and "Month" in df.columns:
+        data = data[data["Month"] == month]
+
     return data
 
-# -----------------------------
-# INSIGHTS ENGINE (LIKE PBI)
-# -----------------------------
-def generate_insights():
 
-    yearly = sales.groupby("Year")["Sales"].sum()
+def generate_pdf():
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
 
-    if len(yearly) > 1:
-        growth = ((yearly.iloc[-1] - yearly.iloc[0]) / yearly.iloc[0]) * 100
-    else:
-        growth = 0
+    total_sales = sales["Sales"].sum()
+    top_product = sales.groupby("Product")["Sales"].sum().idxmax()
 
-    insight = f"📊 Revenue changed by {round(growth,2)}% over the period."
+    c.drawString(50,750,"AI Executive Report")
+    c.drawString(50,700,f"Total Sales: {round(total_sales,2)}")
+    c.drawString(50,670,f"Top Product: {top_product}")
 
-    return insight
+    c.save()
+    buffer.seek(0)
+    return buffer
 
-# -----------------------------
-# LAYOUT
-# -----------------------------
-col1, col2 = st.columns([2,1])
 
 # -----------------------------
-# LEFT: DASHBOARD IMAGE + INSIGHTS
+# UI
 # -----------------------------
-with col1:
-
-    st.subheader("📊 Executive Dashboard")
-    st.image("powerbi_dashboard.png", use_container_width=True)
-
-    st.subheader("📊 AI Insights")
-    st.info(generate_insights())
+page = st.sidebar.radio("Navigation", ["Dashboard","Dataset Explorer","Executive Insights"])
 
 # -----------------------------
-# RIGHT: CHAT
+# DASHBOARD
 # -----------------------------
-with col2:
+if page == "Dashboard":
 
-    st.subheader("💬 AI Copilot")
+    col1, col2 = st.columns([2,1])
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+    with col1:
+        st.subheader("Dashboard")
+        st.image("powerbi_dashboard.png", use_container_width=True)
 
-    for chat in st.session_state.chat_history:
-        with st.chat_message(chat["role"]):
-            st.write(chat["content"])
+    with col2:
+        st.subheader("AI Copilot")
 
-    question = st.chat_input("Ask a business question...")
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
 
-    if question:
+        for chat in st.session_state.chat_history:
+            with st.chat_message(chat["role"]):
+                st.write(chat["content"])
 
-        st.session_state.chat_history.append(
-            {"role":"user","content":question}
-        )
+        question = st.chat_input("Ask a business question")
 
-        try:
-            q, year, product, top_n, metric = extract_entities(question)
-        except Exception as e:
-            st.error(f"Error: {e}")
-            st.stop()
+        if question:
 
-        response = {"role":"assistant"}
+            st.session_state.chat_history.append({"role":"user","content":question})
 
-        # -----------------------------
-        # SALES
-        # -----------------------------
-        if metric == "sales":
+            q, year, month, product, region, category, top_n = extract_entities(question)
 
-            data = apply_filters(sales, product, year)
+            response = {"role":"assistant"}
 
-            if top_n:
-                result = data.groupby("Product")["Sales"].sum().sort_values(ascending=False).head(top_n)
-                response["content"] = f"🏆 Top {top_n} Products:\n{result.to_string()}"
+            # -----------------------------
+            # SALES
+            # -----------------------------
+            if "sales" in q or "revenue" in q:
 
-            elif "vs" in q and year:
-                prev = year - 1
-                curr_val = sales[sales["Year"] == year]["Sales"].sum()
-                prev_val = sales[sales["Year"] == prev]["Sales"].sum()
+                data = apply_filters(sales, product, region, category, year, month)
 
-                growth = ((curr_val - prev_val)/prev_val*100) if prev_val != 0 else 0
+                # TOP N
+                if top_n:
+                    result = data.groupby("Product")["Sales"].sum().sort_values(ascending=False).head(top_n)
+                    response["content"] = f"Top {top_n} Products:\n{result.to_string()}"
 
-                response["content"] = f"""
-Sales {year}: {round(curr_val,2)}
-Sales {prev}: {round(prev_val,2)}
+                # YOY
+                elif "vs" in q and year:
+                    prev_year = year - 1
+
+                    curr = sales[sales["Year"] == year]["Sales"].sum()
+                    prev = sales[sales["Year"] == prev_year]["Sales"].sum()
+
+                    growth = ((curr - prev)/prev*100) if prev != 0 else 0
+
+                    response["content"] = f"""
+Sales {year}: {round(curr,2)}
+Sales {prev_year}: {round(prev,2)}
 Growth: {round(growth,2)}%
 """
 
+                # NORMAL
+                else:
+                    total = data["Sales"].sum()
+
+                    msg = "Total sales"
+
+                    if product: msg += f" for {product}"
+                    if category: msg += f" ({category})"
+                    if region: msg += f" in {region}"
+                    if month: msg += f" Month {month}"
+                    if year: msg += f" {year}"
+
+                    msg += f": {round(total,2)}"
+
+                    if total == 0:
+                        msg += "\n⚠️ No data found"
+
+                    response["content"] = msg
+
+            # -----------------------------
+            # RETURNS
+            # -----------------------------
+            elif "return" in q:
+
+                data = apply_filters(returns, product, region, category, year, month)
+
+                if top_n:
+                    result = data.groupby("Product")["Returns"].sum().sort_values(ascending=False).head(top_n)
+                    response["content"] = f"Top {top_n} Returns:\n{result.to_string()}"
+                else:
+                    total = data["Returns"].sum()
+                    response["content"] = f"Total Returns: {total}"
+
+            # -----------------------------
+            # TRAFFIC
+            # -----------------------------
+            elif "traffic" in q or "visit" in q:
+                trend = website.groupby("Date")["Visits"].sum()
+
+                fig, ax = plt.subplots()
+                trend.plot(ax=ax)
+                st.pyplot(fig)
+
+                response["content"] = "Website traffic trend shown."
+
             else:
-                total = data["Sales"].sum()
+                response["content"] = "Try asking about sales, returns, or comparisons."
 
-                msg = "💰 Total Sales"
+            st.session_state.chat_history.append(response)
+            st.rerun()
 
-                if product:
-                    msg += f" for {product}"
-                if year:
-                    msg += f" in {year}"
+# -----------------------------
+# DATASET EXPLORER
+# -----------------------------
+elif page == "Dataset Explorer":
+    st.dataframe(sales)
 
-                msg += f": {round(total,2)}"
+# -----------------------------
+# EXECUTIVE INSIGHTS
+# -----------------------------
+elif page == "Executive Insights":
 
-                if total == 0:
-                    msg += "\n⚠️ No data found"
+    st.subheader("Insights")
 
-                response["content"] = msg
+    top_product = sales.groupby("Product")["Sales"].sum().idxmax()
+    high_returns = returns.groupby("Product")["Returns"].sum().idxmax()
 
-        # -----------------------------
-        # RETURNS (FIXED)
-        # -----------------------------
-        elif metric == "returns":
+    st.success(f"Top Product: {top_product}")
+    st.warning(f"Highest Returns: {high_returns}")
 
-            data = apply_filters(returns_merged, product, year)
+    pdf = generate_pdf()
 
-            total = data["Returns"].sum()
-
-            msg = "🔁 Total Returns"
-
-            if product:
-                msg += f" for {product}"
-            if year:
-                msg += f" in {year}"
-
-            msg += f": {int(total)}"
-
-            if total == 0:
-                msg += "\n⚠️ No data found"
-
-            response["content"] = msg
-
-        # -----------------------------
-        # TOP PRODUCTS
-        # -----------------------------
-        elif metric == "top":
-
-            result = sales.groupby("Product")["Sales"].sum().sort_values(ascending=False)
-
-            response["content"] = f"""
-🏆 Top Products:
-{result.head(5).to_string()}
-"""
-
-        else:
-            response["content"] = "Try asking about sales, returns, or top products."
-
-        st.session_state.chat_history.append(response)
-        st.rerun()
+    st.download_button(
+        label="Download Report",
+        data=pdf,
+        file_name="report.pdf"
+    )
