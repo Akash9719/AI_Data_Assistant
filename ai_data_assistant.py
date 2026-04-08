@@ -4,13 +4,13 @@ import matplotlib.pyplot as plt
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
+import re
 
 # -----------------------------
 # PAGE CONFIG
 # -----------------------------
 
 st.set_page_config(page_title="Enterprise AI Analytics Platform", layout="wide")
-
 st.title("Enterprise AI Analytics Platform")
 
 # -----------------------------
@@ -118,7 +118,7 @@ if page == "Dashboard":
         k4.metric("Traffic Growth",traffic_growth)
 
     # -----------------------------
-    # AI ASSISTANT (CHAT STYLE)
+    # AI ASSISTANT
     # -----------------------------
 
     with col2:
@@ -129,42 +129,39 @@ if page == "Dashboard":
             st.session_state.chat_history = []
 
         # DISPLAY CHAT HISTORY
-
         for chat in st.session_state.chat_history:
-
             with st.chat_message(chat["role"]):
-
                 st.write(chat["content"])
 
                 if chat.get("chart") == "sales_trend":
-
                     product = chat["product"]
+                    data = sales.copy()
 
-                    data = sales[sales["Product"]==product]
+                    if product:
+                        data = data[data["Product"] == product]
 
                     fig,ax = plt.subplots()
                     data.groupby("Date")["Sales"].sum().plot(ax=ax)
-
-                    ax.set_title(f"Sales Trend - {product}")
+                    ax.set_title(f"Sales Trend - {product if product else 'All Products'}")
                     st.pyplot(fig)
 
                 elif chat.get("chart") == "returns":
+                    data = returns.copy()
 
-                    result = returns.groupby("Product")["Returns"].sum()
+                    if chat.get("product"):
+                        data = data[data["Product"] == chat["product"]]
+
+                    result = data.groupby("Product")["Returns"].sum()
 
                     fig,ax = plt.subplots()
                     result.plot(kind="bar",ax=ax)
-
                     ax.set_title("Returns by Product")
                     st.pyplot(fig)
 
                 elif chat.get("chart") == "traffic":
-
                     trend = website.groupby("Date")["Visits"].sum()
-
                     fig,ax = plt.subplots()
                     trend.plot(ax=ax)
-
                     ax.set_title("Website Traffic Trend")
                     st.pyplot(fig)
 
@@ -178,6 +175,15 @@ if page == "Dashboard":
 
             q = question.lower()
 
+            # -----------------------------
+            # 🔥 ENTITY EXTRACTION
+            # -----------------------------
+
+            # Detect year
+            year_match = re.search(r"\b(20\d{2})\b", q)
+            detected_year = int(year_match.group()) if year_match else None
+
+            # Detect product
             detected_product = None
             products = sales["Product"].unique()
 
@@ -185,71 +191,84 @@ if page == "Dashboard":
                 if str(p).lower() in q:
                     detected_product = p
 
-            response = {}
-            response["role"] = "assistant"
+            response = {"role":"assistant"}
 
-            # TOTAL SALES
+            # -----------------------------
+            # 🔥 SALES LOGIC (DYNAMIC)
+            # -----------------------------
 
-            if "total sales" in q or "total revenue" in q:
+            if "sales" in q or "revenue" in q:
 
-                total_sales = sales["Sales"].sum()
-                response["content"] = f"Total Sales: {round(total_sales,2)}"
+                data = sales.copy()
 
-            # TOTAL RETURNS
+                if detected_product:
+                    data = data[data["Product"] == detected_product]
 
-            elif "total returns" in q:
+                if detected_year:
+                    data = data[data["Year"] == detected_year]
 
-                total_returns = returns["Returns"].sum()
-                response["content"] = f"Total Returns: {total_returns}"
+                total_sales = data["Sales"].sum()
 
-            # PRODUCT SALES
-
-            elif detected_product and "sales" in q:
-
-                data = sales[sales["Product"]==detected_product]
-
-                if "average" in q:
-
-                    avg = data["Sales"].mean()
-                    response["content"] = f"Average sales of {detected_product}: {round(avg,2)}"
-
+                if detected_product and detected_year:
+                    msg = f"Total sales for {detected_product} in {detected_year}: {round(total_sales,2)}"
+                elif detected_product:
+                    msg = f"Total sales for {detected_product}: {round(total_sales,2)}"
+                elif detected_year:
+                    msg = f"Total sales in {detected_year}: {round(total_sales,2)}"
                 else:
+                    msg = f"Total sales: {round(total_sales,2)}"
 
-                    total = data["Sales"].sum()
-                    response["content"] = f"Total sales of {detected_product}: {total}"
+                if total_sales == 0:
+                    msg += "\n⚠️ No data found for given filters."
 
+                response["content"] = msg
                 response["chart"] = "sales_trend"
                 response["product"] = detected_product
 
-            # RETURNS ANALYSIS
+            # -----------------------------
+            # 🔥 RETURNS LOGIC (DYNAMIC)
+            # -----------------------------
 
             elif "return" in q:
 
-                response["content"] = "Here is the returns analysis by product."
-                response["chart"] = "returns"
+                data = returns.copy()
 
-            # TRAFFIC TREND
+                if detected_product:
+                    data = data[data["Product"] == detected_product]
+
+                total_returns = data["Returns"].sum()
+
+                if detected_product:
+                    msg = f"Total returns for {detected_product}: {total_returns}"
+                else:
+                    msg = f"Total returns: {total_returns}"
+
+                response["content"] = msg
+                response["chart"] = "returns"
+                response["product"] = detected_product
+
+            # -----------------------------
+            # TRAFFIC
+            # -----------------------------
 
             elif "traffic" in q or "visit" in q:
-
                 response["content"] = "Here is the website traffic trend."
                 response["chart"] = "traffic"
 
             else:
-
-                response["content"] = "I could not understand the question."
+                response["content"] = "I could not understand the question. Try asking about sales, returns, or traffic."
 
             st.session_state.chat_history.append(response)
-
             st.rerun()
 
         st.write("### Suggested Questions")
 
         st.markdown("""
-        • What is total sales  
-        • What are total returns  
-        • Average sales of board games  
-        • Show sales trend  
+        • What is total sales in 2019  
+        • Total sales for board games  
+        • Total sales for board games in 2019  
+        • Total returns for board games  
+        • Show website traffic  
         """)
 
 # -----------------------------
@@ -278,7 +297,7 @@ elif page == "Dataset Explorer":
         st.dataframe(website)
 
 # -----------------------------
-# EXECUTIVE INSIGHTS PAGE
+# EXECUTIVE INSIGHTS
 # -----------------------------
 
 elif page == "Executive Insights":
@@ -298,24 +317,13 @@ elif page == "Executive Insights":
 
     traffic_trend = "increasing" if last_visit>first_visit else "declining"
 
-    st.success(
-        f"Top Revenue Driver: **{top_product}** generates the highest sales ({top_sales})."
-    )
-
-    st.warning(
-        f"Product Risk: **{high_returns}** has the highest return volume."
-    )
-
-    st.info(
-        f"Website traffic is **{traffic_trend}**, indicating changing customer demand."
-    )
+    st.success(f"Top Revenue Driver: **{top_product}** generates the highest sales ({top_sales}).")
+    st.warning(f"Product Risk: **{high_returns}** has the highest return volume.")
+    st.info(f"Website traffic is **{traffic_trend}**, indicating changing customer demand.")
 
     st.write("### Strategic Recommendations")
-
     st.write(f"• Focus marketing investment on **{top_product}**")
-
     st.write(f"• Investigate return causes for **{high_returns}**")
-
     st.write("• Monitor website engagement trends")
 
     pdf = generate_pdf()
