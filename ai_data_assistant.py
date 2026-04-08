@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import re
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -9,8 +8,8 @@ from io import BytesIO
 # -----------------------------
 # CONFIG
 # -----------------------------
-st.set_page_config(page_title="AI Copilot Dashboard", layout="wide")
-st.title("🤖 AI Copilot Dashboard")
+st.set_page_config(page_title="Enterprise AI Analytics Platform", layout="wide")
+st.title("Enterprise AI Analytics Platform")
 
 # -----------------------------
 # LOAD DATA
@@ -18,20 +17,18 @@ st.title("🤖 AI Copilot Dashboard")
 sales = pd.read_csv("sales_data.csv")
 returns = pd.read_csv("returns_data.csv")
 
-# -----------------------------
 # DATE PREP
-# -----------------------------
 sales["Date"] = pd.to_datetime(sales["Date"])
 sales["Year"] = sales["Date"].dt.year
 sales["Month"] = sales["Date"].dt.month
 
-# 🔥 Time-aware returns (Power BI style relationship)
-returns_merged = sales[["Product","Date","Year","Month"]].merge(
-    returns, on="Product", how="left"
-)
+# -----------------------------
+# 🔥 FIX: PRE-AGGREGATE RETURNS (NO DUPLICATION)
+# -----------------------------
+returns_grouped = returns.groupby("Product").sum(numeric_only=True).reset_index()
 
 # -----------------------------
-# ENTITY EXTRACTION
+# HELPER FUNCTIONS
 # -----------------------------
 def extract_entities(question):
 
@@ -48,7 +45,6 @@ def extract_entities(question):
     top_match = re.search(r"top (\d+)", q)
     top_n = int(top_match.group(1)) if top_match else None
 
-    # Metric detection
     if any(x in q for x in ["sales","revenue"]):
         metric = "sales"
     elif any(x in q for x in ["return","returns"]):
@@ -62,9 +58,7 @@ def extract_entities(question):
 
     return q, year, product, top_n, metric
 
-# -----------------------------
-# FILTER ENGINE (DAX-LIKE)
-# -----------------------------
+
 def apply_filters(df, product, year):
 
     data = df.copy()
@@ -77,26 +71,22 @@ def apply_filters(df, product, year):
 
     return data
 
-# -----------------------------
-# KPI FUNCTION (DYNAMIC)
-# -----------------------------
+
 def calculate_kpis(product=None, year=None):
 
     s = apply_filters(sales, product, year)
-    r = apply_filters(returns_merged, product, year)
+    r = apply_filters(returns_grouped, product, None)
 
     total_sales = s["Sales"].sum()
     total_returns = r["Returns"].sum()
     total_cancel = r["Cancellations"].sum() if "Cancellations" in r.columns else 0
 
-    cancel_rate = (total_cancel / total_sales * 100) if total_sales else 0
     return_rate = (total_returns / total_sales * 100) if total_sales else 0
+    cancel_rate = (total_cancel / total_sales * 100) if total_sales else 0
 
     return total_sales, total_returns, total_cancel, return_rate, cancel_rate
 
-# -----------------------------
-# PDF GENERATOR
-# -----------------------------
+
 def generate_pdf():
 
     buffer = BytesIO()
@@ -111,116 +101,133 @@ def generate_pdf():
 
     c.save()
     buffer.seek(0)
-
     return buffer
 
 # -----------------------------
-# LAYOUT
+# NAVIGATION
 # -----------------------------
-col1, col2 = st.columns([2,1])
-
-# -----------------------------
-# LEFT SIDE (Dashboard + KPIs)
-# -----------------------------
-with col1:
-
-    st.subheader("📊 Executive KPIs")
-
-    total_sales, total_returns, total_cancel, return_rate, cancel_rate = calculate_kpis()
-
-    k1,k2,k3,k4 = st.columns(4)
-    k1.metric("Sales", round(total_sales,2))
-    k2.metric("Returns", int(total_returns))
-    k3.metric("Return %", f"{round(return_rate,2)}%")
-    k4.metric("Cancel %", f"{round(cancel_rate,2)}%")
-
-    st.subheader("📊 Dashboard")
-    st.image("powerbi_dashboard.png", use_container_width=True)
+page = st.sidebar.radio("Navigation", ["Dashboard","Dataset Explorer","AI Insights"])
 
 # -----------------------------
-# RIGHT SIDE (CHAT)
+# DASHBOARD
 # -----------------------------
-with col2:
+if page == "Dashboard":
 
-    st.subheader("💬 AI Copilot")
+    col1, col2 = st.columns([2,1])
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+    # LEFT SIDE
+    with col1:
 
-    for chat in st.session_state.chat_history:
-        with st.chat_message(chat["role"]):
-            st.write(chat["content"])
+        st.subheader("📊 Executive KPIs")
 
-    question = st.chat_input("Ask a question...")
+        total_sales, total_returns, total_cancel, return_rate, cancel_rate = calculate_kpis()
 
-    if question:
+        k1,k2,k3,k4 = st.columns(4)
+        k1.metric("Sales", round(total_sales,2))
+        k2.metric("Returns", int(total_returns))
+        k3.metric("Return %", f"{round(return_rate,2)}%")
+        k4.metric("Cancel %", f"{round(cancel_rate,2)}%")
 
-        st.session_state.chat_history.append({"role":"user","content":question})
+        st.subheader("📊 Dashboard")
+        st.image("powerbi_dashboard.png", use_container_width=True)
 
-        q, year, product, top_n, metric = extract_entities(question)
+    # RIGHT SIDE (CHAT)
+    with col2:
 
-        response = {"role":"assistant"}
+        st.subheader("💬 AI Copilot")
 
-        # SALES
-        if metric == "sales":
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
 
-            data = apply_filters(sales, product, year)
+        for chat in st.session_state.chat_history:
+            with st.chat_message(chat["role"]):
+                st.write(chat["content"])
 
-            if top_n:
-                result = data.groupby("Product")["Sales"].sum().sort_values(ascending=False).head(top_n)
-                response["content"] = result.to_string()
+        question = st.chat_input("Ask a question...")
 
-            else:
-                total = data["Sales"].sum()
-                response["content"] = f"Total Sales: {round(total,2)}"
+        if question:
 
-        # RETURNS
-        elif metric == "returns":
+            st.session_state.chat_history.append({"role":"user","content":question})
 
-            data = apply_filters(returns_merged, product, year)
-            total = data["Returns"].sum()
+            q, year, product, top_n, metric = extract_entities(question)
 
-            response["content"] = f"Total Returns: {int(total)}"
+            response = {"role":"assistant"}
 
-        # CANCELLATIONS
-        elif metric == "cancellations":
+            if metric == "sales":
 
-            data = apply_filters(returns_merged, product, year)
-            total = data["Cancellations"].sum()
+                data = apply_filters(sales, product, year)
 
-            response["content"] = f"Total Cancellations: {int(total)}"
+                if top_n:
+                    result = data.groupby("Product")["Sales"].sum().sort_values(ascending=False).head(top_n)
+                    response["content"] = result.to_string()
+                else:
+                    response["content"] = f"Total Sales: {round(data['Sales'].sum(),2)}"
 
-        # RATE ANALYSIS
-        elif metric == "rate":
+            elif metric == "returns":
 
-            s = apply_filters(sales, product, year)
-            r = apply_filters(returns_merged, product, year)
+                data = apply_filters(returns_grouped, product, None)
+                response["content"] = f"Total Returns: {int(data['Returns'].sum())}"
 
-            total_sales = s["Sales"].sum()
-            total_returns = r["Returns"].sum()
-            total_cancel = r["Cancellations"].sum()
+            elif metric == "cancellations":
 
-            return_rate = (total_returns / total_sales * 100) if total_sales else 0
-            cancel_rate = (total_cancel / total_sales * 100) if total_sales else 0
+                data = apply_filters(returns_grouped, product, None)
+                response["content"] = f"Total Cancellations: {int(data['Cancellations'].sum())}"
 
-            response["content"] = f"""
+            elif metric == "rate":
+
+                total_sales, total_returns, total_cancel, return_rate, cancel_rate = calculate_kpis(product, year)
+
+                response["content"] = f"""
 Return Rate: {round(return_rate,2)}%
 Cancellation Rate: {round(cancel_rate,2)}%
 """
 
-        else:
-            response["content"] = "Try sales, returns, cancellations, or rates."
+            else:
+                response["content"] = "Try asking about sales, returns, cancellations or rates."
 
-        st.session_state.chat_history.append(response)
-        st.rerun()
+            st.session_state.chat_history.append(response)
+            st.rerun()
 
 # -----------------------------
-# PDF DOWNLOAD
+# DATASET EXPLORER
 # -----------------------------
-pdf = generate_pdf()
+elif page == "Dataset Explorer":
 
-st.download_button(
-    "📄 Download Report",
-    pdf,
-    file_name="report.pdf"
-)
+    st.subheader("📂 Dataset Explorer")
+
+    option = st.selectbox("Select dataset", ["Sales","Returns"])
+
+    if option == "Sales":
+        st.dataframe(sales)
+    else:
+        st.dataframe(returns)
+
+# -----------------------------
+# AI INSIGHTS
+# -----------------------------
+elif page == "AI Insights":
+
+    st.subheader("🧠 AI Insights")
+
+    total_sales = sales["Sales"].sum()
+    total_returns = returns["Returns"].sum()
+
+    return_rate = (total_returns / total_sales * 100) if total_sales else 0
+
+    top_product = sales.groupby("Product")["Sales"].sum().idxmax()
+
+    st.success(f"🏆 Top Product: {top_product}")
+    st.warning(f"🔁 Return Rate: {round(return_rate,2)}%")
+
+    if return_rate > 20:
+        st.error("⚠️ High return rate detected")
+    else:
+        st.info("✅ Return rate is normal")
+
+    pdf = generate_pdf()
+
+    st.download_button(
+        "📄 Download Report",
+        pdf,
+        file_name="AI_Report.pdf"
+    )
