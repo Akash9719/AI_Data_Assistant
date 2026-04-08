@@ -1,9 +1,6 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from io import BytesIO
 import re
 
 # -----------------------------
@@ -22,20 +19,31 @@ website = pd.read_csv("website_data.csv")
 sales["Date"] = pd.to_datetime(sales["Date"])
 sales["Year"] = sales["Date"].dt.year
 sales["Month"] = sales["Date"].dt.month
-sales["Month_Name"] = sales["Date"].dt.strftime("%B")
 
 # -----------------------------
 # HELPER FUNCTIONS
 # -----------------------------
+def detect_metric(q):
+
+    if any(x in q for x in ["sales","revenue"]):
+        return "sales"
+
+    if any(x in q for x in ["return","returns","refund"]):
+        return "returns"
+
+    if any(x in q for x in ["cancel","cancellation"]):
+        return "cancellations"
+
+    return None
+
 
 def extract_entities(question):
+
     q = question.lower()
 
-    # YEAR
     year_match = re.search(r"\b(20\d{2})\b", q)
     year = int(year_match.group()) if year_match else None
 
-    # MONTH
     months = {
         "january":1,"february":2,"march":3,"april":4,
         "may":5,"june":6,"july":7,"august":8,
@@ -47,31 +55,29 @@ def extract_entities(question):
         if m in q:
             month = months[m]
 
-    # PRODUCT
     product = None
     for p in sales["Product"].unique():
         if str(p).lower() in q:
             product = p
 
-    # REGION
     region = None
     if "Region" in sales.columns:
         for r in sales["Region"].dropna().unique():
             if str(r).lower() in q:
                 region = r
 
-    # CATEGORY
     category = None
     if "Category" in sales.columns:
         for c in sales["Category"].dropna().unique():
             if str(c).lower() in q:
                 category = c
 
-    # TOP N
     top_match = re.search(r"top (\d+)", q)
     top_n = int(top_match.group(1)) if top_match else None
 
-    return q, year, month, product, region, category, top_n
+    metric = detect_metric(q)
+
+    return q, year, month, product, region, category, top_n, metric
 
 
 def apply_filters(df, product, region, category, year, month):
@@ -93,22 +99,6 @@ def apply_filters(df, product, region, category, year, month):
         data = data[data["Month"] == month]
 
     return data
-
-
-def generate_pdf():
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-
-    total_sales = sales["Sales"].sum()
-    top_product = sales.groupby("Product")["Sales"].sum().idxmax()
-
-    c.drawString(50,750,"AI Executive Report")
-    c.drawString(50,700,f"Total Sales: {round(total_sales,2)}")
-    c.drawString(50,670,f"Top Product: {top_product}")
-
-    c.save()
-    buffer.seek(0)
-    return buffer
 
 
 # -----------------------------
@@ -143,84 +133,84 @@ if page == "Dashboard":
 
             st.session_state.chat_history.append({"role":"user","content":question})
 
-            q, year, month, product, region, category, top_n = extract_entities(question)
+            q, year, month, product, region, category, top_n, metric = extract_entities(question)
 
             response = {"role":"assistant"}
 
             # -----------------------------
             # SALES
             # -----------------------------
-            if "sales" in q or "revenue" in q:
+            if metric == "sales":
 
                 data = apply_filters(sales, product, region, category, year, month)
+                total_sales = data["Sales"].sum()
 
-                # TOP N
-                if top_n:
-                    result = data.groupby("Product")["Sales"].sum().sort_values(ascending=False).head(top_n)
-                    response["content"] = f"Top {top_n} Products:\n{result.to_string()}"
-
-                # YOY
-                elif "vs" in q and year:
-                    prev_year = year - 1
-
-                    curr = sales[sales["Year"] == year]["Sales"].sum()
-                    prev = sales[sales["Year"] == prev_year]["Sales"].sum()
-
-                    growth = ((curr - prev)/prev*100) if prev != 0 else 0
-
-                    response["content"] = f"""
-Sales {year}: {round(curr,2)}
-Sales {prev_year}: {round(prev,2)}
-Growth: {round(growth,2)}%
-"""
-
-                # NORMAL
-                else:
-                    total = data["Sales"].sum()
-
-                    msg = "Total sales"
-
-                    if product: msg += f" for {product}"
-                    if category: msg += f" ({category})"
-                    if region: msg += f" in {region}"
-                    if month: msg += f" Month {month}"
-                    if year: msg += f" {year}"
-
-                    msg += f": {round(total,2)}"
-
-                    if total == 0:
-                        msg += "\n⚠️ No data found"
-
-                    response["content"] = msg
+                response["content"] = f"💰 Total Sales: {round(total_sales,2)}"
 
             # -----------------------------
             # RETURNS
             # -----------------------------
-            elif "return" in q:
+            elif metric == "returns":
+
+                data = apply_filters(returns, product, region, category, year, month)
+                total_returns = data["Returns"].sum()
+
+                response["content"] = f"🔁 Total Returns: {int(total_returns)}"
+
+            # -----------------------------
+            # CANCELLATIONS
+            # -----------------------------
+            elif metric == "cancellations":
+
+                if "Cancellations" not in returns.columns:
+                    response["content"] = "⚠️ Cancellations data not available"
+
+                else:
+                    data = apply_filters(returns, product, region, category, year, month)
+                    total_cancel = data["Cancellations"].sum()
+
+                    response["content"] = f"❌ Total Cancellations: {int(total_cancel)}"
+
+            # -----------------------------
+            # RATE ANALYSIS
+            # -----------------------------
+            elif "rate" in q or "ratio" in q:
+
+                data_sales = apply_filters(sales, product, region, category, year, month)
+                data_returns = apply_filters(returns, product, region, category, year, month)
+
+                total_sales = data_sales["Sales"].sum()
+                total_returns = data_returns["Returns"].sum()
+                total_cancel = data_returns["Cancellations"].sum() if "Cancellations" in data_returns.columns else 0
+
+                cancel_rate = (total_cancel / total_sales * 100) if total_sales != 0 else 0
+                return_rate = (total_returns / total_sales * 100) if total_sales != 0 else 0
+
+                response["content"] = f"""
+📊 Return Rate: {round(return_rate,2)}%
+❌ Cancellation Rate: {round(cancel_rate,2)}%
+
+🔍 Insight:
+{'⚠️ High cancellations observed' if cancel_rate > return_rate else 'Returns are higher than cancellations'}
+"""
+
+            # -----------------------------
+            # COMBINED ANALYSIS
+            # -----------------------------
+            elif "return" in q and "cancel" in q:
 
                 data = apply_filters(returns, product, region, category, year, month)
 
-                if top_n:
-                    result = data.groupby("Product")["Returns"].sum().sort_values(ascending=False).head(top_n)
-                    response["content"] = f"Top {top_n} Returns:\n{result.to_string()}"
-                else:
-                    total = data["Returns"].sum()
-                    response["content"] = f"Total Returns: {total}"
+                total_returns = data["Returns"].sum()
+                total_cancel = data["Cancellations"].sum()
 
-            # -----------------------------
-            # TRAFFIC
-            # -----------------------------
-            elif "traffic" in q or "visit" in q:
-                trend = website.groupby("Date")["Visits"].sum()
-
-                fig, ax = plt.subplots()
-                trend.plot(ax=ax)
-                st.pyplot(fig)
-
-                response["content"] = "Website traffic trend shown."
+                response["content"] = f"""
+🔁 Returns: {int(total_returns)}
+❌ Cancellations: {int(total_cancel)}
+"""
 
             else:
-                response["content"] = "Try asking about sales, returns, or comparisons."
+                response["content"] = "Try asking about sales, returns, cancellations, or rates."
 
             st.session_state.chat_history.append(response)
             st.rerun()
@@ -243,11 +233,3 @@ elif page == "Executive Insights":
 
     st.success(f"Top Product: {top_product}")
     st.warning(f"Highest Returns: {high_returns}")
-
-    pdf = generate_pdf()
-
-    st.download_button(
-        label="Download Report",
-        data=pdf,
-        file_name="report.pdf"
-    )
